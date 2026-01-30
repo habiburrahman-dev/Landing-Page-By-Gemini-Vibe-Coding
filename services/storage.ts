@@ -153,6 +153,10 @@ export const saveBlogPost = (post: BlogPost) => {
   localStorage.setItem(BLOG_KEY, JSON.stringify(posts));
 };
 
+export const saveAllBlogPosts = (posts: BlogPost[]) => {
+  localStorage.setItem(BLOG_KEY, JSON.stringify(posts));
+};
+
 export const deleteBlogPost = (id: string) => {
   const posts = getBlogPosts();
   const newPosts = posts.filter((p) => p.id !== id);
@@ -174,6 +178,10 @@ export const saveService = (service: ServiceItem) => {
     services.push(service);
   }
   
+  localStorage.setItem(SERVICES_KEY, JSON.stringify(services));
+};
+
+export const saveAllServices = (services: ServiceItem[]) => {
   localStorage.setItem(SERVICES_KEY, JSON.stringify(services));
 };
 

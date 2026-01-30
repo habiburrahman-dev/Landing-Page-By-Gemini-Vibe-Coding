@@ -1,10 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PublicLayout } from './components/PublicLayout';
 import { AdminLayout } from './components/AdminLayout';
 import { HomePage, BlogPage, ServicesPage, AboutPage, AppointmentPage, BlogPostPage } from './pages/PublicPages';
 import { Dashboard, SettingsForm, BlogManager, ServicesManager } from './pages/AdminPages';
-import { getSettings, saveSettings, getBlogPosts, saveBlogPost, deleteBlogPost, getServices, saveService, deleteService } from './services/storage';
+import { 
+  getSettings, saveSettings, 
+  getBlogPosts, saveBlogPost, deleteBlogPost, saveAllBlogPosts,
+  getServices, saveService, deleteService, saveAllServices 
+} from './services/storage';
 import { SiteSettings, BlogPost, ServiceItem } from './types';
 import { Icons } from './components/Icons';
 import { applyTheme } from './services/themeUtils';
@@ -52,6 +57,136 @@ export default function App() {
       i18n.changeLanguage(settings.defaultLanguage);
     }
   }, [settings.defaultLanguage, i18n]);
+
+  // Auto-translate stored content (Tagline, Description, Services, Blog) if it matches default values
+  useEffect(() => {
+    const syncTranslations = () => {
+      const langs = ['id', 'en'];
+      
+      // 1. Settings (Tagline & Description)
+      const currentTagline = settings.tagline;
+      const currentDesc = settings.description;
+      
+      const isDefaultTagline = langs.some(l => i18n.t('defaultTagline', { lng: l }) === currentTagline);
+      const isDefaultDesc = langs.some(l => i18n.t('defaultDescription', { lng: l }) === currentDesc);
+      
+      let newSettings = { ...settings };
+      let settingsChanged = false;
+
+      if (isDefaultTagline) {
+        const localizedTagline = i18n.t('defaultTagline'); 
+        if (localizedTagline !== currentTagline) {
+          newSettings.tagline = localizedTagline;
+          settingsChanged = true;
+        }
+      }
+
+      if (isDefaultDesc) {
+        const localizedDesc = i18n.t('defaultDescription');
+        if (localizedDesc !== currentDesc) {
+          newSettings.description = localizedDesc;
+          settingsChanged = true;
+        }
+      }
+
+      if (settingsChanged) {
+        saveSettings(newSettings);
+        setSettingsState(newSettings);
+      }
+
+      // 2. Services
+      // Create a copy to avoid mutation during iteration
+      const currentServices = JSON.parse(JSON.stringify(services)) as ServiceItem[];
+      let servicesChanged = false;
+
+      currentServices.forEach((service) => {
+         const id = service.id;
+         // Ensure we only try to translate if the ID exists in our dictionary (prevents user generated IDs from breaking)
+         if (i18n.exists(`services.${id}.title`, { lng: 'en' })) {
+            // Check Title
+            const isDefaultTitle = langs.some(l => i18n.t(`services.${id}.title`, { lng: l }) === service.title);
+            if (isDefaultTitle) {
+               const newTitle = i18n.t(`services.${id}.title`);
+               if (service.title !== newTitle) {
+                 service.title = newTitle;
+                 servicesChanged = true;
+               }
+            }
+
+            // Check Description
+            const isDefaultSvcDesc = langs.some(l => i18n.t(`services.${id}.description`, { lng: l }) === service.description);
+            if (isDefaultSvcDesc) {
+               const newSvcDesc = i18n.t(`services.${id}.description`);
+               if (service.description !== newSvcDesc) {
+                 service.description = newSvcDesc;
+                 servicesChanged = true;
+               }
+            }
+         }
+      });
+
+      if (servicesChanged) {
+        saveAllServices(currentServices);
+        setServicesState(currentServices);
+      }
+
+      // 3. Blog Posts
+      const currentPosts = JSON.parse(JSON.stringify(posts)) as BlogPost[];
+      let postsChanged = false;
+
+      currentPosts.forEach((post) => {
+         const id = post.id;
+         if (i18n.exists(`posts.${id}.title`, { lng: 'en' })) {
+            // Check Title
+            const isDefaultTitle = langs.some(l => i18n.t(`posts.${id}.title`, { lng: l }) === post.title);
+            if (isDefaultTitle) {
+               const newTitle = i18n.t(`posts.${id}.title`);
+               if (post.title !== newTitle) {
+                 post.title = newTitle;
+                 postsChanged = true;
+               }
+            }
+
+            // Check Excerpt
+            const isDefaultExcerpt = langs.some(l => i18n.t(`posts.${id}.excerpt`, { lng: l }) === post.excerpt);
+            if (isDefaultExcerpt) {
+               const newExcerpt = i18n.t(`posts.${id}.excerpt`);
+               if (post.excerpt !== newExcerpt) {
+                 post.excerpt = newExcerpt;
+                 postsChanged = true;
+               }
+            }
+
+            // Check Content
+            const isDefaultContent = langs.some(l => i18n.t(`posts.${id}.content`, { lng: l }) === post.content);
+            if (isDefaultContent) {
+               const newContent = i18n.t(`posts.${id}.content`);
+               if (post.content !== newContent) {
+                 post.content = newContent;
+                 postsChanged = true;
+               }
+            }
+            
+            // Check Category
+            const isDefaultCategory = langs.some(l => i18n.t(`posts.${id}.category`, { lng: l }) === post.category);
+            if (isDefaultCategory) {
+               const newCategory = i18n.t(`posts.${id}.category`);
+               if (post.category !== newCategory) {
+                 post.category = newCategory;
+                 postsChanged = true;
+               }
+            }
+         }
+      });
+
+      if (postsChanged) {
+        saveAllBlogPosts(currentPosts);
+        setPostsState(currentPosts);
+      }
+    };
+
+    syncTranslations();
+  }, [i18n.language, settings, services, posts]); // Added services and posts dependencies
 
   // Apply dark mode class to HTML element
   useEffect(() => {
