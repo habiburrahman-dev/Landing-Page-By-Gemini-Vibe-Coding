@@ -1,0 +1,32 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-primary: 'Inter';
+}
+
+body { 
+  font-family: var(--font-primary), sans-serif; 
+}
+
+/* Hide Google Translate Toolbar */
+.goog-te-banner-frame.skiptranslate {
+  display: none !important;
+} 
+
+body {
+  top: 0px !important; 
+}
+
+/* Hide the google translate element */
+#google_translate_element {
+  display: none;
+}
+
+/* Fix hover styles injected by google */
+font:hover {
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
