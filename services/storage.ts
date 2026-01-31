@@ -4,6 +4,7 @@ import { SiteSettings, BlogPost, ServiceItem } from '../types';
 const SETTINGS_KEY = 'kmm_settings';
 const BLOG_KEY = 'kmm_blog';
 const SERVICES_KEY = 'kmm_services';
+const ADMIN_KEY = 'kmm_admin_creds';
 
 const DEFAULT_SETTINGS: SiteSettings = {
   name: 'Klinik Mitra Medika',
@@ -13,6 +14,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   phone: '+62 21 555 0199',
   email: 'contact@mitramedika.co.id',
   logoUrl: 'https://cdn-icons-png.flaticon.com/512/3063/3063176.png',
+  faviconUrl: 'https://cdn-icons-png.flaticon.com/512/3063/3063176.png',
   heroImageUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=2000',
   facebookUrl: 'https://facebook.com',
   instagramUrl: 'https://instagram.com',
@@ -22,6 +24,11 @@ const DEFAULT_SETTINGS: SiteSettings = {
   defaultLanguage: 'id',
   themeColor: '#2563eb',
   fontFamily: 'Inter',
+};
+
+const DEFAULT_ADMIN_CREDS = {
+  email: 'admin@mitramedika.co.id',
+  password: 'password'
 };
 
 const DEFAULT_BLOG_POSTS: BlogPost[] = [
@@ -49,7 +56,7 @@ const DEFAULT_BLOG_POSTS: BlogPost[] = [
     id: '3',
     title: 'Dental Hygiene 101',
     excerpt: 'How to maintain a perfect smile and prevent gum diseases.',
-    content: 'Good dental hygiene is essential for healthy teeth and gums. It also affects your overall health.\n\nKey practices include:\n- Brushing twice a day with fluoride toothpaste.\n- Flossing daily to remove plaque between teeth.\n- Limiting sugary snacks and drinks.\n- Visiting your dentist regularly for checkups and cleanings.\n\nIgnoring dental health can lead to cavities, gum disease, and even tooth loss.',
+    content: 'Good dental hygiene is essential for healthy teeth and gums. It also affects your overall health.\n\nKey practices include:\n- Brushing twice a day with fluoride toothpaste.\n- Flossing daily to remove plaque between teeth.\n- Limiting sugary snacks and drinks.\n- Visiting your dentist regularly for checkups and cleanings.\n\nMengabaikan kesehatan gigi dapat menyebabkan gigi berlubang, penyakit gusi, dan bahkan kehilangan gigi.',
     author: 'Drg. Ratna Sari',
     category: 'Dental',
     coverImageUrl: 'https://images.unsplash.com/photo-1588776814546-1ffcf4722e12?auto=format&fit=crop&q=80&w=800',
@@ -133,6 +140,15 @@ export const getSettings = (): SiteSettings => {
 
 export const saveSettings = (settings: SiteSettings) => {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+};
+
+export const getAdminCredentials = () => {
+  const stored = localStorage.getItem(ADMIN_KEY);
+  return stored ? JSON.parse(stored) : DEFAULT_ADMIN_CREDS;
+};
+
+export const saveAdminCredentials = (creds: {email: string, password: string}) => {
+  localStorage.setItem(ADMIN_KEY, JSON.stringify(creds));
 };
 
 export const getBlogPosts = (): BlogPost[] => {

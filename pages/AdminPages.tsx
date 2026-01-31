@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { SiteSettings, BlogPost, ServiceItem } from '../types';
 import { Icons, IconKeys } from '../components/Icons';
@@ -81,9 +82,27 @@ export const Dashboard: React.FC<{ postsCount: number; servicesCount: number }> 
   </div>
 );
 
-export const SettingsForm: React.FC<{ settings: SiteSettings; onSave: (s: SiteSettings) => void }> = ({ settings, onSave }) => {
+interface SettingsFormProps {
+  settings: SiteSettings;
+  onSave: (s: SiteSettings) => void;
+  adminEmail: string;
+  onUpdateCredentials: (email: string, password?: string) => void;
+}
+
+export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, adminEmail, onUpdateCredentials }) => {
   const [formData, setFormData] = useState<SiteSettings>(settings);
   const [success, setSuccess] = useState(false);
+
+  // Security Form State
+  const [secEmail, setSecEmail] = useState(adminEmail);
+  const [secNewPass, setSecNewPass] = useState('');
+  const [secConfirmPass, setSecConfirmPass] = useState('');
+  const [secError, setSecError] = useState('');
+  const [secSuccess, setSecSuccess] = useState(false);
+
+  useEffect(() => {
+    setSecEmail(adminEmail);
+  }, [adminEmail]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,130 +111,204 @@ export const SettingsForm: React.FC<{ settings: SiteSettings; onSave: (s: SiteSe
     setTimeout(() => setSuccess(false), 3000);
   };
 
+  const handleSecuritySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecError('');
+    setSecSuccess(false);
+
+    if (secNewPass && secNewPass !== secConfirmPass) {
+      setSecError("New passwords do not match.");
+      return;
+    }
+
+    if (!secEmail.includes('@')) {
+      setSecError("Invalid email address.");
+      return;
+    }
+
+    onUpdateCredentials(secEmail, secNewPass || undefined);
+    setSecNewPass('');
+    setSecConfirmPass('');
+    setSecSuccess(true);
+    setTimeout(() => setSecSuccess(false), 3000);
+  };
+
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
-       <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50 rounded-t-xl">
-         <h2 className="font-semibold text-gray-800 dark:text-white">General Settings</h2>
-       </div>
-       
-       <form onSubmit={handleSubmit} className="p-6">
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-           <Input label="Clinic Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-           <Input label="Phone Number" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-           <Input label="Email Address" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-           <Input label="Address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+    <div className="space-y-8">
+      {/* General Settings */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
+         <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50 rounded-t-xl">
+           <h2 className="font-semibold text-gray-800 dark:text-white">General Settings</h2>
          </div>
          
-         <div className="mt-4">
-             <Input label="Tagline" value={formData.tagline} onChange={e => setFormData({...formData, tagline: e.target.value})} placeholder="e.g., Your Trusted Health Partner" />
-             <TextArea label="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Describe your clinic..." />
-         </div>
-         
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-4">
-            <div>
-               <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4 border-b dark:border-slate-700 pb-2">Location (Map)</h3>
-               <Input label="Latitude" value={formData.latitude} onChange={e => setFormData({...formData, latitude: e.target.value})} placeholder="-6.2088" />
-               <Input label="Longitude" value={formData.longitude} onChange={e => setFormData({...formData, longitude: e.target.value})} placeholder="106.8456" />
-            </div>
-            <div>
-               <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4 border-b dark:border-slate-700 pb-2">Images & Socials</h3>
-               <Input label="Logo URL" value={formData.logoUrl} onChange={e => setFormData({...formData, logoUrl: e.target.value})} />
-               <Input label="Hero Image URL" value={formData.heroImageUrl} onChange={e => setFormData({...formData, heroImageUrl: e.target.value})} />
-               <Input label="Facebook URL" value={formData.facebookUrl} onChange={e => setFormData({...formData, facebookUrl: e.target.value})} />
-               <Input label="Instagram URL" value={formData.instagramUrl} onChange={e => setFormData({...formData, instagramUrl: e.target.value})} />
-            </div>
-         </div>
+         <form onSubmit={handleSubmit} className="p-6">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <Input label="Clinic Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+             <Input label="Phone Number" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+             <Input label="Email Address" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+             <Input label="Address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+           </div>
+           
+           <div className="mt-4">
+               <Input label="Tagline" value={formData.tagline} onChange={e => setFormData({...formData, tagline: e.target.value})} placeholder="e.g., Your Trusted Health Partner" />
+               <TextArea label="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Describe your clinic..." />
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-4">
+              <div>
+                 <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4 border-b dark:border-slate-700 pb-2">Location (Map)</h3>
+                 <Input label="Latitude" value={formData.latitude} onChange={e => setFormData({...formData, latitude: e.target.value})} placeholder="-6.2088" />
+                 <Input label="Longitude" value={formData.longitude} onChange={e => setFormData({...formData, longitude: e.target.value})} placeholder="106.8456" />
+              </div>
+              <div>
+                 <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4 border-b dark:border-slate-700 pb-2">Images & Socials</h3>
+                 <Input label="Logo URL" value={formData.logoUrl} onChange={e => setFormData({...formData, logoUrl: e.target.value})} />
+                 <Input label="Favicon URL" value={formData.faviconUrl || ''} onChange={e => setFormData({...formData, faviconUrl: e.target.value})} placeholder="URL for browser tab icon" />
+                 <Input label="Hero Image URL" value={formData.heroImageUrl} onChange={e => setFormData({...formData, heroImageUrl: e.target.value})} />
+                 <Input label="Facebook URL" value={formData.facebookUrl} onChange={e => setFormData({...formData, facebookUrl: e.target.value})} />
+                 <Input label="Instagram URL" value={formData.instagramUrl} onChange={e => setFormData({...formData, instagramUrl: e.target.value})} />
+              </div>
+           </div>
 
-         <div className="border-t dark:border-slate-700 pt-6 mb-6">
-             <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4">Appearance</h3>
-             
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Theme Color</label>
-                   <div className="flex flex-wrap gap-3 mb-3">
-                     {PRESET_COLORS.map(color => (
-                       <button
-                         key={color.value}
-                         type="button"
-                         onClick={() => setFormData({...formData, themeColor: color.value})}
-                         className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${formData.themeColor === color.value ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent'}`}
-                         style={{ backgroundColor: color.value }}
-                         title={color.name}
-                       >
-                         {formData.themeColor === color.value && <Icons.Check size={14} className="text-white drop-shadow-md" />}
-                       </button>
-                     ))}
-                   </div>
-                   <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500 dark:text-slate-400">Custom Hex:</span>
-                      <input 
-                         type="color" 
-                         value={formData.themeColor} 
-                         onChange={e => setFormData({...formData, themeColor: e.target.value})}
-                         className="h-8 w-14 p-0 border-0 rounded cursor-pointer"
-                      />
-                      <input 
-                         type="text" 
-                         value={formData.themeColor} 
-                         onChange={e => setFormData({...formData, themeColor: e.target.value})}
-                         className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded bg-white text-gray-900 dark:bg-slate-700 dark:text-white"
-                      />
-                   </div>
-                </div>
+           <div className="border-t dark:border-slate-700 pt-6 mb-6">
+               <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4">Appearance</h3>
+               
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                     <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Theme Color</label>
+                     <div className="flex flex-wrap gap-3 mb-3">
+                       {PRESET_COLORS.map(color => (
+                         <button
+                           key={color.value}
+                           type="button"
+                           onClick={() => setFormData({...formData, themeColor: color.value})}
+                           className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${formData.themeColor === color.value ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent'}`}
+                           style={{ backgroundColor: color.value }}
+                           title={color.name}
+                         >
+                           {formData.themeColor === color.value && <Icons.Check size={14} className="text-white drop-shadow-md" />}
+                         </button>
+                       ))}
+                     </div>
+                     <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500 dark:text-slate-400">Custom Hex:</span>
+                        <input 
+                           type="color" 
+                           value={formData.themeColor} 
+                           onChange={e => setFormData({...formData, themeColor: e.target.value})}
+                           className="h-8 w-14 p-0 border-0 rounded cursor-pointer"
+                        />
+                        <input 
+                           type="text" 
+                           value={formData.themeColor} 
+                           onChange={e => setFormData({...formData, themeColor: e.target.value})}
+                           className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded bg-white text-gray-900 dark:bg-slate-700 dark:text-white"
+                        />
+                     </div>
+                  </div>
 
-                <div>
-                   <Select 
-                     label="Typography" 
-                     value={formData.fontFamily} 
-                     onChange={e => setFormData({...formData, fontFamily: e.target.value})}
-                   >
-                      {GOOGLE_FONTS.map(font => (
-                         <option key={font.value} value={font.value}>{font.name}</option>
-                      ))}
-                   </Select>
-                   <div className="p-4 rounded-lg bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600">
-                      <p className="text-sm text-gray-600 dark:text-slate-300" style={{ fontFamily: formData.fontFamily }}>
-                        The quick brown fox jumps over the lazy dog.
-                        <br/>
-                        <strong>Bold Text Example</strong>
-                      </p>
-                   </div>
-                </div>
+                  <div>
+                     <Select 
+                       label="Typography" 
+                       value={formData.fontFamily} 
+                       onChange={e => setFormData({...formData, fontFamily: e.target.value})}
+                     >
+                        {GOOGLE_FONTS.map(font => (
+                           <option key={font.value} value={font.value}>{font.name}</option>
+                        ))}
+                     </Select>
+                     <div className="p-4 rounded-lg bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600">
+                        <p className="text-sm text-gray-600 dark:text-slate-300" style={{ fontFamily: formData.fontFamily }}>
+                          The quick brown fox jumps over the lazy dog.
+                          <br/>
+                          <strong>Bold Text Example</strong>
+                        </p>
+                     </div>
+                  </div>
+               </div>
+
+               <div className="mt-6">
+                  <Select 
+                    label="Default Language" 
+                    value={formData.defaultLanguage} 
+                    onChange={e => setFormData({...formData, defaultLanguage: e.target.value as 'id' | 'en'})}
+                  >
+                     <option value="id">Bahasa Indonesia</option>
+                     <option value="en">English (US)</option>
+                  </Select>
+               </div>
+           </div>
+
+           <div className="border-t dark:border-slate-700 pt-6">
+             <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4">WhatsApp Appointment Settings</h3>
+             <TextArea 
+               label="Message Template" 
+               value={formData.appointmentTemplate} 
+               onChange={e => setFormData({...formData, appointmentTemplate: e.target.value})} 
+               rows={5}
+             />
+             <p className="text-xs text-gray-500 dark:text-slate-400 mt-[-10px] mb-4">
+               Available placeholders: {'{name}'}, {'{service}'}, {'{date}'}, {'{time}'}, {'{notes}'}
+             </p>
+           </div>
+
+           <div className="mt-6 flex items-center gap-4">
+             <button type="submit" className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 font-medium transition-colors">
+               <Icons.Save size={18} />
+               Save Site Settings
+             </button>
+             {success && <span className="text-green-600 font-medium animate-pulse">Settings saved successfully!</span>}
+           </div>
+         </form>
+      </div>
+
+      {/* Admin Account Security */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-red-100 dark:border-red-900/30">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-red-50 dark:bg-red-900/20 rounded-t-xl">
+           <h2 className="font-semibold text-red-800 dark:text-red-200 flex items-center gap-2">
+             <Icons.Settings size={18} /> Admin Account Security
+           </h2>
+        </div>
+        <form onSubmit={handleSecuritySubmit} className="p-6">
+          <Input 
+            label="Admin Email" 
+            type="email" 
+            value={secEmail} 
+            onChange={e => setSecEmail(e.target.value)} 
+            required 
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input 
+              label="New Password" 
+              type="password" 
+              value={secNewPass} 
+              onChange={e => setSecNewPass(e.target.value)} 
+              placeholder="Leave blank to keep current" 
+            />
+            <Input 
+              label="Confirm New Password" 
+              type="password" 
+              value={secConfirmPass} 
+              onChange={e => setSecConfirmPass(e.target.value)} 
+              placeholder="Confirm new password"
+            />
+          </div>
+          
+          {secError && (
+             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-sm rounded-lg border border-red-100 dark:border-red-800">
+               {secError}
              </div>
+          )}
 
-             <div className="mt-6">
-                <Select 
-                  label="Default Language" 
-                  value={formData.defaultLanguage} 
-                  onChange={e => setFormData({...formData, defaultLanguage: e.target.value as 'id' | 'en'})}
-                >
-                   <option value="id">Bahasa Indonesia</option>
-                   <option value="en">English (US)</option>
-                </Select>
-             </div>
-         </div>
-
-         <div className="border-t dark:border-slate-700 pt-6">
-           <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4">WhatsApp Appointment Settings</h3>
-           <TextArea 
-             label="Message Template" 
-             value={formData.appointmentTemplate} 
-             onChange={e => setFormData({...formData, appointmentTemplate: e.target.value})} 
-             rows={5}
-           />
-           <p className="text-xs text-gray-500 dark:text-slate-400 mt-[-10px] mb-4">
-             Available placeholders: {'{name}'}, {'{service}'}, {'{date}'}, {'{time}'}, {'{notes}'}
-           </p>
-         </div>
-
-         <div className="mt-6 flex items-center gap-4">
-           <button type="submit" className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 font-medium transition-colors">
-             <Icons.Save size={18} />
-             Save Changes
-           </button>
-           {success && <span className="text-green-600 font-medium animate-pulse">Settings saved successfully!</span>}
-         </div>
-       </form>
+          <div className="mt-2 flex items-center gap-4">
+             <button type="submit" className="flex items-center gap-2 bg-slate-800 dark:bg-slate-700 text-white px-4 py-2 rounded-lg hover:bg-slate-900 dark:hover:bg-slate-600 font-medium transition-colors">
+               <Icons.Save size={18} />
+               Update Credentials
+             </button>
+             {secSuccess && <span className="text-green-600 font-medium animate-pulse">Credentials updated successfully!</span>}
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

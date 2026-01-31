@@ -8,7 +8,8 @@ import { Dashboard, SettingsForm, BlogManager, ServicesManager } from './pages/A
 import { 
   getSettings, saveSettings, 
   getBlogPosts, saveBlogPost, deleteBlogPost, saveAllBlogPosts,
-  getServices, saveService, deleteService, saveAllServices 
+  getServices, saveService, deleteService, saveAllServices,
+  getAdminCredentials, saveAdminCredentials
 } from './services/storage';
 import { SiteSettings, BlogPost, ServiceItem } from './types';
 import { Icons } from './components/Icons';
@@ -40,6 +41,7 @@ export default function App() {
   const [settings, setSettingsState] = useState<SiteSettings>(getSettings());
   const [posts, setPostsState] = useState<BlogPost[]>(getBlogPosts());
   const [services, setServicesState] = useState<ServiceItem[]>(getServices());
+  const [adminCreds, setAdminCreds] = useState(getAdminCredentials());
   
   // User Preferences State
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -209,10 +211,28 @@ export default function App() {
   useEffect(() => {
     applyFont(settings.fontFamily || 'Inter');
   }, [settings.fontFamily]);
+
+  // Apply Favicon (New)
+  useEffect(() => {
+    let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+    if (!link) {
+      link = document.createElement('link');
+      link.type = 'image/x-icon';
+      link.rel = 'shortcut icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    // Use faviconUrl if available, otherwise fallback to logoUrl
+    link.href = settings.faviconUrl || settings.logoUrl;
+  }, [settings.faviconUrl, settings.logoUrl]);
   
   // Admin State
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'settings' | 'blog' | 'services'>('dashboard');
+
+  // Login State
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   // handlers
   const handleSaveSettings = (newSettings: SiteSettings) => {
@@ -240,6 +260,36 @@ export default function App() {
     setServicesState(getServices());
   };
 
+  const handleUpdateCredentials = (email: string, password?: string) => {
+    const newCreds = { email, password: password || adminCreds.password };
+    saveAdminCredentials(newCreds);
+    setAdminCreds(newCreds);
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+
+    // 1. Validation for Injection Patterns
+    // Explicitly check for characters common in SQL injection payloads (', ", ;, --, etc.)
+    const injectionPattern = /['";\\]|(--)/;
+    if (injectionPattern.test(loginEmail) || injectionPattern.test(loginPassword)) {
+      setLoginError("Security Alert: Invalid characters detected in input.");
+      return;
+    }
+
+    // 2. Strict Credential Check
+    // Using strict equality (===) prevents any type coercion exploits
+    if (loginEmail === adminCreds.email && loginPassword === adminCreds.password) {
+      setIsAdminLoggedIn(true);
+      // Clear credentials from state after successful login
+      setLoginEmail('');
+      setLoginPassword('');
+    } else {
+      setLoginError("Invalid email or password.");
+    }
+  };
+
   // Admin Login Screen
   if (path === '/admin' && !isAdminLoggedIn) {
     return (
@@ -251,14 +301,35 @@ export default function App() {
               </div>
            </div>
            <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white mb-6">Admin Login</h2>
-           <form onSubmit={(e) => { e.preventDefault(); setIsAdminLoggedIn(true); }} className="space-y-4">
+           
+           {loginError && (
+             <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm rounded-lg border border-red-200 dark:border-red-800">
+               {loginError}
+             </div>
+           )}
+
+           <form onSubmit={handleLogin} className="space-y-4">
              <div>
                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Email</label>
-               <input type="email" defaultValue="admin@mitramedika.co.id" className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none bg-white text-gray-900 dark:bg-slate-700 dark:text-white" />
+               <input 
+                 type="email" 
+                 value={loginEmail}
+                 onChange={(e) => setLoginEmail(e.target.value)}
+                 className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none bg-white text-gray-900 dark:bg-slate-700 dark:text-white" 
+                 placeholder="Enter admin email"
+                 required
+               />
              </div>
              <div>
                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Password</label>
-               <input type="password" defaultValue="password" className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none bg-white text-gray-900 dark:bg-slate-700 dark:text-white" />
+               <input 
+                 type="password" 
+                 value={loginPassword}
+                 onChange={(e) => setLoginPassword(e.target.value)}
+                 className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none bg-white text-gray-900 dark:bg-slate-700 dark:text-white" 
+                 placeholder="Enter password"
+                 required
+               />
              </div>
              <button type="submit" className="w-full bg-primary-600 text-white py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors">
                Sign In
@@ -283,7 +354,14 @@ export default function App() {
         toggleDarkMode={() => setIsDarkMode(!isDarkMode)}
       >
         {activeAdminTab === 'dashboard' && <Dashboard postsCount={posts.length} servicesCount={services.length} />}
-        {activeAdminTab === 'settings' && <SettingsForm settings={settings} onSave={handleSaveSettings} />}
+        {activeAdminTab === 'settings' && (
+          <SettingsForm 
+            settings={settings} 
+            onSave={handleSaveSettings} 
+            adminEmail={adminCreds.email}
+            onUpdateCredentials={handleUpdateCredentials}
+          />
+        )}
         {activeAdminTab === 'services' && <ServicesManager services={services} onSave={handleSaveService} onDelete={handleDeleteService} />}
         {activeAdminTab === 'blog' && <BlogManager posts={posts} onSave={handleSavePost} onDelete={handleDeletePost} />}
       </AdminLayout>

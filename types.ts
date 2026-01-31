@@ -7,6 +7,7 @@ export interface SiteSettings {
   phone: string;
   email: string;
   logoUrl: string;
+  faviconUrl: string;
   heroImageUrl: string;
   facebookUrl: string;
   instagramUrl: string;
