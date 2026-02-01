@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { SiteSettings } from '../types';
+import { SiteSettings, ServiceItem } from '../types';
 import { Icons } from './Icons';
 
 interface PublicLayoutProps {
   children: React.ReactNode;
   settings: SiteSettings;
+  services?: ServiceItem[];
   onNavigate: (path: string) => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
@@ -14,6 +16,7 @@ interface PublicLayoutProps {
 export const PublicLayout: React.FC<PublicLayoutProps> = ({ 
   children, 
   settings, 
+  services = [],
   onNavigate, 
   isDarkMode,
   toggleDarkMode 
@@ -102,7 +105,12 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center cursor-pointer" onClick={() => onNavigate('/')}>
-               <img src={settings.logoUrl} alt="Logo" className="h-10 w-10 mr-3 object-contain" />
+               <img 
+                 src={settings.logoUrl} 
+                 alt="Logo" 
+                 className="h-10 w-10 mr-3 object-contain" 
+                 referrerPolicy="no-referrer"
+               />
                <div>
                  <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-none">{settings.name}</h1>
                  <p className="text-xs text-slate-500 dark:text-slate-400 tracking-wide mt-0.5">HEALTHCARE CENTER</p>
@@ -184,11 +192,16 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-12">
           <div className="col-span-1 md:col-span-1">
             <div className="flex items-center text-white mb-6">
-              <img src={settings.logoUrl} alt="Logo" className="h-8 w-8 mr-3 brightness-0 invert" />
+              <img 
+                src={settings.logoUrl} 
+                alt="Logo" 
+                className="h-8 w-8 mr-3 object-contain" 
+                referrerPolicy="no-referrer"
+              />
               <span className="text-lg font-bold">{settings.name}</span>
             </div>
             <p className="text-sm leading-relaxed mb-6 text-slate-400">
-              {settings.description}
+              {t('defaultDescription', settings.description)}
             </p>
             <div className="flex space-x-4">
               <a href={settings.facebookUrl} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-primary-600 transition-colors flex items-center justify-center"><Icons.Facebook size={16} /></a>
@@ -209,10 +222,23 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
           <div>
             <h3 className="text-white font-semibold mb-6">{t('ourServices')}</h3>
             <ul className="space-y-3 text-sm">
-              <li className="hover:text-primary-400 transition-colors cursor-pointer" onClick={() => onNavigate('/services')}>General Checkup</li>
-              <li className="hover:text-primary-400 transition-colors cursor-pointer" onClick={() => onNavigate('/services')}>Dental Care</li>
-              <li className="hover:text-primary-400 transition-colors cursor-pointer" onClick={() => onNavigate('/services')}>Pediatrics</li>
-              <li className="hover:text-primary-400 transition-colors cursor-pointer" onClick={() => onNavigate('/services')}>Cardiology</li>
+              {services.length > 0 ? (
+                services.slice(0, 5).map(service => (
+                  <li 
+                    key={service.id} 
+                    className="hover:text-primary-400 transition-colors cursor-pointer" 
+                    onClick={() => onNavigate('/services')}
+                  >
+                    {t(`services.${service.id}.title`, service.title)}
+                  </li>
+                ))
+              ) : (
+                <>
+                  <li className="hover:text-primary-400 transition-colors cursor-pointer" onClick={() => onNavigate('/services')}>General Checkup</li>
+                  <li className="hover:text-primary-400 transition-colors cursor-pointer" onClick={() => onNavigate('/services')}>Dental Care</li>
+                  <li className="hover:text-primary-400 transition-colors cursor-pointer" onClick={() => onNavigate('/services')}>Pediatrics</li>
+                </>
+              )}
             </ul>
           </div>
 

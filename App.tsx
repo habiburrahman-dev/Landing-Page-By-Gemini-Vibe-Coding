@@ -60,135 +60,54 @@ export default function App() {
     }
   }, [settings.defaultLanguage, i18n]);
 
-  // Auto-translate stored content (Tagline, Description, Services, Blog) if it matches default values
+  // Inject Stored Translations into i18next (Settings, Services, Blog)
   useEffect(() => {
-    const syncTranslations = () => {
-      const langs = ['id', 'en'];
-      
-      // 1. Settings (Tagline & Description)
-      const currentTagline = settings.tagline;
-      const currentDesc = settings.description;
-      
-      const isDefaultTagline = langs.some(l => i18n.t('defaultTagline', { lng: l }) === currentTagline);
-      const isDefaultDesc = langs.some(l => i18n.t('defaultDescription', { lng: l }) === currentDesc);
-      
-      let newSettings = { ...settings };
-      let settingsChanged = false;
+    // 1. Inject Site Settings Translations
+    if (settings.translations) {
+      i18n.addResourceBundle('id', 'translation', settings.translations.id, true, true);
+      i18n.addResourceBundle('en', 'translation', settings.translations.en, true, true);
+    }
 
-      if (isDefaultTagline) {
-        const localizedTagline = i18n.t('defaultTagline'); 
-        if (localizedTagline !== currentTagline) {
-          newSettings.tagline = localizedTagline;
-          settingsChanged = true;
-        }
+    // 2. Inject Service Translations
+    const idServices: Record<string, any> = {};
+    const enServices: Record<string, any> = {};
+
+    services.forEach(service => {
+      if (service.translations) {
+        idServices[service.id] = service.translations.id;
+        enServices[service.id] = service.translations.en;
       }
+    });
 
-      if (isDefaultDesc) {
-        const localizedDesc = i18n.t('defaultDescription');
-        if (localizedDesc !== currentDesc) {
-          newSettings.description = localizedDesc;
-          settingsChanged = true;
-        }
+    if (Object.keys(idServices).length > 0) {
+      i18n.addResourceBundle('id', 'translation', { services: idServices }, true, true);
+    }
+    if (Object.keys(enServices).length > 0) {
+      i18n.addResourceBundle('en', 'translation', { services: enServices }, true, true);
+    }
+
+    // 3. Inject Blog Post Translations
+    const idPosts: Record<string, any> = {};
+    const enPosts: Record<string, any> = {};
+
+    posts.forEach(post => {
+      if (post.translations) {
+        idPosts[post.id] = post.translations.id;
+        enPosts[post.id] = post.translations.en;
       }
+    });
 
-      if (settingsChanged) {
-        saveSettings(newSettings);
-        setSettingsState(newSettings);
-      }
+    if (Object.keys(idPosts).length > 0) {
+      i18n.addResourceBundle('id', 'translation', { posts: idPosts }, true, true);
+    }
+    if (Object.keys(enPosts).length > 0) {
+      i18n.addResourceBundle('en', 'translation', { posts: enPosts }, true, true);
+    }
+    
+    // Force a re-render/update if the language is currently active
+    i18n.changeLanguage(i18n.language);
 
-      // 2. Services
-      // Create a copy to avoid mutation during iteration
-      const currentServices = JSON.parse(JSON.stringify(services)) as ServiceItem[];
-      let servicesChanged = false;
-
-      currentServices.forEach((service) => {
-         const id = service.id;
-         // Ensure we only try to translate if the ID exists in our dictionary (prevents user generated IDs from breaking)
-         if (i18n.exists(`services.${id}.title`, { lng: 'en' })) {
-            // Check Title
-            const isDefaultTitle = langs.some(l => i18n.t(`services.${id}.title`, { lng: l }) === service.title);
-            if (isDefaultTitle) {
-               const newTitle = i18n.t(`services.${id}.title`);
-               if (service.title !== newTitle) {
-                 service.title = newTitle;
-                 servicesChanged = true;
-               }
-            }
-
-            // Check Description
-            const isDefaultSvcDesc = langs.some(l => i18n.t(`services.${id}.description`, { lng: l }) === service.description);
-            if (isDefaultSvcDesc) {
-               const newSvcDesc = i18n.t(`services.${id}.description`);
-               if (service.description !== newSvcDesc) {
-                 service.description = newSvcDesc;
-                 servicesChanged = true;
-               }
-            }
-         }
-      });
-
-      if (servicesChanged) {
-        saveAllServices(currentServices);
-        setServicesState(currentServices);
-      }
-
-      // 3. Blog Posts
-      const currentPosts = JSON.parse(JSON.stringify(posts)) as BlogPost[];
-      let postsChanged = false;
-
-      currentPosts.forEach((post) => {
-         const id = post.id;
-         if (i18n.exists(`posts.${id}.title`, { lng: 'en' })) {
-            // Check Title
-            const isDefaultTitle = langs.some(l => i18n.t(`posts.${id}.title`, { lng: l }) === post.title);
-            if (isDefaultTitle) {
-               const newTitle = i18n.t(`posts.${id}.title`);
-               if (post.title !== newTitle) {
-                 post.title = newTitle;
-                 postsChanged = true;
-               }
-            }
-
-            // Check Excerpt
-            const isDefaultExcerpt = langs.some(l => i18n.t(`posts.${id}.excerpt`, { lng: l }) === post.excerpt);
-            if (isDefaultExcerpt) {
-               const newExcerpt = i18n.t(`posts.${id}.excerpt`);
-               if (post.excerpt !== newExcerpt) {
-                 post.excerpt = newExcerpt;
-                 postsChanged = true;
-               }
-            }
-
-            // Check Content
-            const isDefaultContent = langs.some(l => i18n.t(`posts.${id}.content`, { lng: l }) === post.content);
-            if (isDefaultContent) {
-               const newContent = i18n.t(`posts.${id}.content`);
-               if (post.content !== newContent) {
-                 post.content = newContent;
-                 postsChanged = true;
-               }
-            }
-            
-            // Check Category
-            const isDefaultCategory = langs.some(l => i18n.t(`posts.${id}.category`, { lng: l }) === post.category);
-            if (isDefaultCategory) {
-               const newCategory = i18n.t(`posts.${id}.category`);
-               if (post.category !== newCategory) {
-                 post.category = newCategory;
-                 postsChanged = true;
-               }
-            }
-         }
-      });
-
-      if (postsChanged) {
-        saveAllBlogPosts(currentPosts);
-        setPostsState(currentPosts);
-      }
-    };
-
-    syncTranslations();
-  }, [i18n.language, settings, services, posts]); // Added services and posts dependencies
+  }, [settings, services, posts, i18n]);
 
   // Apply dark mode class to HTML element
   useEffect(() => {
@@ -271,7 +190,6 @@ export default function App() {
     setLoginError('');
 
     // 1. Validation for Injection Patterns
-    // Explicitly check for characters common in SQL injection payloads (', ", ;, --, etc.)
     const injectionPattern = /['";\\]|(--)/;
     if (injectionPattern.test(loginEmail) || injectionPattern.test(loginPassword)) {
       setLoginError("Security Alert: Invalid characters detected in input.");
@@ -279,10 +197,8 @@ export default function App() {
     }
 
     // 2. Strict Credential Check
-    // Using strict equality (===) prevents any type coercion exploits
     if (loginEmail === adminCreds.email && loginPassword === adminCreds.password) {
       setIsAdminLoggedIn(true);
-      // Clear credentials from state after successful login
       setLoginEmail('');
       setLoginPassword('');
     } else {
@@ -380,6 +296,7 @@ export default function App() {
   return (
     <PublicLayout 
       settings={settings} 
+      services={services}
       onNavigate={navigate} 
       isDarkMode={isDarkMode}
       toggleDarkMode={() => setIsDarkMode(!isDarkMode)}

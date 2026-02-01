@@ -1,21 +1,32 @@
+
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SiteSettings, BlogPost, ServiceItem } from '../types';
-import { Icons } from '../components/Icons';
+import { Icons, IconKeys } from '../components/Icons';
 
 // --- Components used in pages ---
 
 const ServiceCard: React.FC<{ service: ServiceItem }> = ({ service }) => {
-  const IconComponent = (Icons as any)[service.iconName] || Icons.Stethoscope;
   const { t } = useTranslation();
   
+  // Use translations if available via i18n keys (injected in App.tsx)
+  const title = t(`services.${service.id}.title`, service.title);
+  const description = t(`services.${service.id}.description`, service.description);
+
+  const isLucide = IconKeys.includes(service.iconName);
+  const IconComponent = isLucide ? (Icons as any)[service.iconName] : null;
+
   return (
     <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group h-full flex flex-col">
       <div className="w-14 h-14 bg-primary-50 dark:bg-slate-700 rounded-xl flex items-center justify-center text-primary-600 dark:text-primary-400 mb-6 group-hover:bg-primary-600 group-hover:text-white transition-colors">
-        <IconComponent size={28} />
+        {isLucide ? (
+           <IconComponent size={28} />
+        ) : (
+           <i className={`${service.iconName}`} style={{ fontSize: '28px' }}></i>
+        )}
       </div>
-      <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">{service.title}</h3>
-      <p className="text-slate-500 dark:text-slate-400 leading-relaxed flex-grow">{service.description}</p>
+      <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">{title}</h3>
+      <p className="text-slate-500 dark:text-slate-400 leading-relaxed flex-grow">{description}</p>
       <div className="mt-6 flex items-center text-primary-600 dark:text-primary-400 text-sm font-semibold cursor-pointer group-hover:gap-2 transition-all">
         {t('learnMore')} <Icons.ArrowRight size={16} className="ml-1" />
       </div>
@@ -25,12 +36,21 @@ const ServiceCard: React.FC<{ service: ServiceItem }> = ({ service }) => {
 
 const BlogCard: React.FC<{ post: BlogPost; onNavigate: (p: string) => void }> = ({ post, onNavigate }) => {
   const { t } = useTranslation();
+  const title = t(`posts.${post.id}.title`, post.title);
+  const excerpt = t(`posts.${post.id}.excerpt`, post.excerpt);
+  const category = t(`posts.${post.id}.category`, post.category);
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all group flex flex-col h-full">
       <div className="relative h-48 overflow-hidden shrink-0">
-        <img src={post.coverImageUrl} alt={post.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        <img 
+          src={post.coverImageUrl} 
+          alt={title} 
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+          referrerPolicy="no-referrer"
+        />
         <div className="absolute top-4 left-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-primary-800 dark:text-primary-300 uppercase tracking-wide">
-          {post.category}
+          {category}
         </div>
       </div>
       <div className="p-6 flex flex-col flex-grow">
@@ -40,10 +60,10 @@ const BlogCard: React.FC<{ post: BlogPost; onNavigate: (p: string) => void }> = 
           <span>{post.author}</span>
         </div>
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3 line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-          {post.title}
+          {title}
         </h3>
         <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-4 line-clamp-3 flex-grow">
-          {post.excerpt}
+          {excerpt}
         </p>
         <button onClick={() => onNavigate(`/blog/${post.id}`)} className="text-primary-600 dark:text-primary-400 text-sm font-semibold flex items-center gap-1 hover:gap-2 transition-all mt-auto">
           {t('readArticle')} <Icons.ChevronRight size={16} />
@@ -75,6 +95,7 @@ export const HomePage: React.FC<PageProps> = ({ settings, posts, services, onNav
              alt="Clinic" 
              className="w-full h-full object-cover"
              style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 100%, 0% 100%)' }} 
+             referrerPolicy="no-referrer"
            />
            <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/50 to-transparent md:from-slate-900 md:via-slate-900/50 md:via-transparent"></div>
         </div>
@@ -83,10 +104,10 @@ export const HomePage: React.FC<PageProps> = ({ settings, posts, services, onNav
           <div className="md:w-1/2 pt-20 pb-20 md:py-40 flex flex-col justify-center">
             <span className="text-primary-600 dark:text-primary-400 font-bold tracking-wider uppercase text-sm mb-4">{t('welcome')} {settings.name}</span>
             <h1 className="text-4xl md:text-6xl font-bold text-slate-900 dark:text-white leading-tight mb-6">
-              {settings.tagline}
+              {t('defaultTagline')}
             </h1>
             <p className="text-lg text-slate-600 dark:text-slate-300 mb-8 max-w-lg leading-relaxed">
-              {settings.description}
+              {t('defaultDescription')}
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <button onClick={() => onNavigate('/appointment')} className="bg-primary-600 text-white px-8 py-3.5 rounded-full font-semibold hover:bg-primary-700 shadow-xl shadow-primary-200 dark:shadow-none transition-all hover:-translate-y-1">
@@ -127,15 +148,15 @@ export const HomePage: React.FC<PageProps> = ({ settings, posts, services, onNav
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-primary-800 dark:divide-primary-900">
              <div className="p-6">
-               <div className="text-4xl font-bold mb-2">15+</div>
+               <div className="text-4xl font-bold mb-2">{settings.stats.yearsExperience}</div>
                <div className="text-primary-200">{t('yearsExp')}</div>
              </div>
              <div className="p-6">
-               <div className="text-4xl font-bold mb-2">50+</div>
+               <div className="text-4xl font-bold mb-2">{settings.stats.specialistDoctors}</div>
                <div className="text-primary-200">{t('specialists')}</div>
              </div>
              <div className="p-6">
-               <div className="text-4xl font-bold mb-2">24/7</div>
+               <div className="text-4xl font-bold mb-2">{settings.stats.emergencyHours}</div>
                <div className="text-primary-200">{t('emergencySupport')}</div>
              </div>
           </div>
@@ -261,7 +282,7 @@ export const AboutPage: React.FC<{ settings: SiteSettings }> = ({ settings }) =>
                <div>
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">{t('ourStory')}</h2>
                   <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-lg">
-                    {settings.description}
+                    {t('defaultDescription')}
                   </p>
                   <p className="text-slate-600 dark:text-slate-300 leading-relaxed mt-4">
                     Founded with a vision to provide accessible and high-quality healthcare, {settings.name} has grown to become a trusted medical center in the community. Our team of dedicated professionals is here to support your journey to better health.
@@ -470,13 +491,17 @@ export const BlogPostPage: React.FC<{ post?: BlogPost; onNavigate: (p: string) =
     );
   }
 
+  const title = t(`posts.${post.id}.title`, post.title);
+  const category = t(`posts.${post.id}.category`, post.category);
+  const content = t(`posts.${post.id}.content`, post.content);
+
   const handleShareFacebook = () => {
     const url = encodeURIComponent(window.location.href);
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
   };
 
   const handleShareWhatsApp = () => {
-    const text = encodeURIComponent(post.title);
+    const text = encodeURIComponent(title);
     const url = encodeURIComponent(window.location.href);
     window.open(`https://wa.me/?text=${text}%20${url}`, '_blank');
   };
@@ -491,7 +516,12 @@ export const BlogPostPage: React.FC<{ post?: BlogPost; onNavigate: (p: string) =
     <article className="min-h-screen bg-white dark:bg-slate-900 transition-colors duration-300">
       {/* Hero Header */}
       <div className="relative h-[400px] w-full">
-         <img src={post.coverImageUrl} alt={post.title} className="w-full h-full object-cover" />
+         <img 
+           src={post.coverImageUrl} 
+           alt={title} 
+           className="w-full h-full object-cover" 
+           referrerPolicy="no-referrer"
+         />
          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 to-transparent"></div>
          <div className="absolute bottom-0 left-0 w-full p-8 md:p-12 max-w-5xl mx-auto">
             <button 
@@ -501,10 +531,10 @@ export const BlogPostPage: React.FC<{ post?: BlogPost; onNavigate: (p: string) =
                <Icons.ArrowRight size={16} className="rotate-180" /> {t('backToBlog')}
             </button>
             <div className="flex items-center gap-4 mb-4">
-               <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{post.category}</span>
+               <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{category}</span>
                <span className="text-white/80 text-sm">{post.publishedAt}</span>
             </div>
-            <h1 className="text-3xl md:text-5xl font-bold text-white leading-tight mb-4">{post.title}</h1>
+            <h1 className="text-3xl md:text-5xl font-bold text-white leading-tight mb-4">{title}</h1>
             <div className="flex items-center gap-2 text-white/90">
                <span className="text-sm font-medium">{t('by')} {post.author}</span>
             </div>
@@ -514,7 +544,7 @@ export const BlogPostPage: React.FC<{ post?: BlogPost; onNavigate: (p: string) =
       {/* Content */}
       <div className="max-w-3xl mx-auto px-6 py-16">
          <div className="prose prose-lg prose-slate dark:prose-invert mx-auto">
-            {post.content.split('\n').map((paragraph, idx) => (
+            {content.split('\n').map((paragraph, idx) => (
               <p key={idx} className="mb-6 text-slate-700 dark:text-slate-300 leading-8">
                 {paragraph}
               </p>

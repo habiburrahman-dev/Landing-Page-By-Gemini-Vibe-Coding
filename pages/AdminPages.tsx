@@ -4,6 +4,26 @@ import { SiteSettings, BlogPost, ServiceItem } from '../types';
 import { Icons, IconKeys } from '../components/Icons';
 import { PRESET_COLORS } from '../services/themeUtils';
 import { GOOGLE_FONTS } from '../services/fontUtils';
+import { translateText } from '../services/googleTranslate';
+import { getSettings } from '../services/storage';
+
+// --- Helper for Image URLs ---
+const processImageUrl = (url: string) => {
+  if (!url) return '';
+  // Check for Google Drive links
+  // Handles standard view links, uc export links, and checks for file ID
+  if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
+    // Try to match standard file ID pattern /file/d/ID or query param id=ID
+    const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    
+    // If a File ID is found, return the lh3.googleusercontent.com direct link
+    // This domain is significantly more reliable for <img> tags than drive.google.com/uc
+    if (fileIdMatch && fileIdMatch[1]) {
+        return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+    }
+  }
+  return url;
+};
 
 // --- Reusable Admin Components ---
 
@@ -92,6 +112,7 @@ interface SettingsFormProps {
 export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, adminEmail, onUpdateCredentials }) => {
   const [formData, setFormData] = useState<SiteSettings>(settings);
   const [success, setSuccess] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
 
   // Security Form State
   const [secEmail, setSecEmail] = useState(adminEmail);
@@ -104,11 +125,75 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
     setSecEmail(adminEmail);
   }, [adminEmail]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
-    setSuccess(true);
-    setTimeout(() => setSuccess(false), 3000);
+    setIsTranslating(true);
+
+    // Create a copy of the new data to manipulate
+    const newData = { ...formData };
+    
+    // Determine translation direction based on default language
+    const sourceLang = newData.defaultLanguage; // e.g., 'id'
+    const targetLang = sourceLang === 'id' ? 'en' : 'id';
+
+    try {
+        // --- Smart Translation Logic ---
+        
+        // 1. Tagline Logic
+        if (newData.tagline !== settings.tagline) {
+            // Update source lang translation in storage
+            newData.translations = {
+                ...newData.translations,
+                [sourceLang]: {
+                    ...newData.translations[sourceLang],
+                    defaultTagline: newData.tagline
+                }
+            };
+
+            // Call Google Translate API for target lang
+            const translatedTagline = await translateText(newData.tagline, sourceLang, targetLang);
+            
+            newData.translations = {
+                ...newData.translations,
+                [targetLang]: {
+                    ...newData.translations[targetLang],
+                    defaultTagline: translatedTagline
+                }
+            };
+        }
+
+        // 2. Description Logic
+        if (newData.description !== settings.description) {
+            // Update source lang translation in storage
+            newData.translations = {
+                ...newData.translations,
+                [sourceLang]: {
+                    ...newData.translations[sourceLang],
+                    defaultDescription: newData.description
+                }
+            };
+
+            // Call Google Translate API for target lang
+            const translatedDesc = await translateText(newData.description, sourceLang, targetLang);
+            
+            newData.translations = {
+                ...newData.translations,
+                [targetLang]: {
+                    ...newData.translations[targetLang],
+                    defaultDescription: translatedDesc
+                }
+            };
+        }
+
+        // Save final result
+        onSave(newData);
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+    } catch (error) {
+        console.error("Error saving settings:", error);
+    } finally {
+        setIsTranslating(false);
+    }
   };
 
   const handleSecuritySubmit = (e: React.FormEvent) => {
@@ -152,6 +237,10 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
            <div className="mt-4">
                <Input label="Tagline" value={formData.tagline} onChange={e => setFormData({...formData, tagline: e.target.value})} placeholder="e.g., Your Trusted Health Partner" />
                <TextArea label="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Describe your clinic..." />
+               <p className="text-xs text-gray-500 dark:text-slate-400 mt-[-10px] mb-4 flex items-center gap-1">
+                 <Icons.Activity size={12} className="text-primary-500"/>
+                 Updates here will automatically translate to other languages via Google Translate.
+               </p>
            </div>
            
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-4">
@@ -162,12 +251,60 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
               </div>
               <div>
                  <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4 border-b dark:border-slate-700 pb-2">Images & Socials</h3>
-                 <Input label="Logo URL" value={formData.logoUrl} onChange={e => setFormData({...formData, logoUrl: e.target.value})} />
-                 <Input label="Favicon URL" value={formData.faviconUrl || ''} onChange={e => setFormData({...formData, faviconUrl: e.target.value})} placeholder="URL for browser tab icon" />
-                 <Input label="Hero Image URL" value={formData.heroImageUrl} onChange={e => setFormData({...formData, heroImageUrl: e.target.value})} />
+                 <Input 
+                   label="Logo URL" 
+                   value={formData.logoUrl} 
+                   onChange={e => setFormData({...formData, logoUrl: processImageUrl(e.target.value)})} 
+                   placeholder="Direct link or Google Drive share link"
+                 />
+                 {formData.logoUrl && (
+                   <div className="mb-4 p-2 bg-gray-50 dark:bg-slate-700 rounded border border-gray-200 dark:border-slate-600">
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Preview:</p>
+                      <img src={formData.logoUrl} alt="Logo" className="h-12 w-12 object-contain" referrerPolicy="no-referrer" />
+                   </div>
+                 )}
+                 <Input 
+                   label="Favicon URL" 
+                   value={formData.faviconUrl || ''} 
+                   onChange={e => setFormData({...formData, faviconUrl: processImageUrl(e.target.value)})} 
+                   placeholder="URL for browser tab icon (supports Drive links)" 
+                 />
+                 <Input 
+                   label="Hero Image URL" 
+                   value={formData.heroImageUrl} 
+                   onChange={e => setFormData({...formData, heroImageUrl: processImageUrl(e.target.value)})} 
+                   placeholder="Banner image (supports Drive links)"
+                 />
+                 {formData.heroImageUrl && (
+                   <div className="mb-4 p-2 bg-gray-50 dark:bg-slate-700 rounded border border-gray-200 dark:border-slate-600">
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Preview:</p>
+                      <img src={formData.heroImageUrl} alt="Hero" className="h-32 w-full object-cover rounded" referrerPolicy="no-referrer" />
+                   </div>
+                 )}
                  <Input label="Facebook URL" value={formData.facebookUrl} onChange={e => setFormData({...formData, facebookUrl: e.target.value})} />
                  <Input label="Instagram URL" value={formData.instagramUrl} onChange={e => setFormData({...formData, instagramUrl: e.target.value})} />
               </div>
+           </div>
+
+           <div className="border-t dark:border-slate-700 pt-6 mb-6">
+               <h3 className="text-sm font-medium text-gray-900 dark:text-slate-200 mb-4">Homepage Statistics</h3>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <Input 
+                   label="Years Experience" 
+                   value={formData.stats.yearsExperience} 
+                   onChange={e => setFormData({...formData, stats: {...formData.stats, yearsExperience: e.target.value}})} 
+                 />
+                 <Input 
+                   label="Specialist Doctors" 
+                   value={formData.stats.specialistDoctors} 
+                   onChange={e => setFormData({...formData, stats: {...formData.stats, specialistDoctors: e.target.value}})} 
+                 />
+                 <Input 
+                   label="Emergency Support" 
+                   value={formData.stats.emergencyHours} 
+                   onChange={e => setFormData({...formData, stats: {...formData.stats, emergencyHours: e.target.value}})} 
+                 />
+               </div>
            </div>
 
            <div className="border-t dark:border-slate-700 pt-6 mb-6">
@@ -253,9 +390,22 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
            </div>
 
            <div className="mt-6 flex items-center gap-4">
-             <button type="submit" className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 font-medium transition-colors">
-               <Icons.Save size={18} />
-               Save Site Settings
+             <button 
+               type="submit" 
+               disabled={isTranslating}
+               className={`flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg font-medium transition-colors ${isTranslating ? 'opacity-75 cursor-wait' : 'hover:bg-primary-700'}`}
+             >
+               {isTranslating ? (
+                   <>
+                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                     Translating & Saving...
+                   </>
+               ) : (
+                   <>
+                     <Icons.Save size={18} />
+                     Save Site Settings
+                   </>
+               )}
              </button>
              {success && <span className="text-green-600 font-medium animate-pulse">Settings saved successfully!</span>}
            </div>
@@ -316,6 +466,15 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
 export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: ServiceItem) => void; onDelete: (id: string) => void }> = ({ services, onSave, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<ServiceItem | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCustomIcon, setIsCustomIcon] = useState(false);
+
+  useEffect(() => {
+     if (editForm) {
+        // If the current icon is NOT in IconKeys, assume it is custom
+        setIsCustomIcon(!IconKeys.includes(editForm.iconName));
+     }
+  }, [editForm]);
 
   const handleEdit = (service: ServiceItem) => {
     setEditForm(service);
@@ -332,13 +491,87 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
     setIsEditing(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editForm) {
-      onSave(editForm);
+    if (!editForm) return;
+
+    setIsSaving(true);
+
+    try {
+      // Logic: Update translation if value changed
+      const settings = getSettings();
+      const sourceLang = settings.defaultLanguage; // e.g. 'id'
+      const targetLang = sourceLang === 'id' ? 'en' : 'id';
+      
+      // Initialize translation structure if missing. 
+      // Deep clone existing translations to avoid mutation, or create new structure for new items.
+      let translations = editForm.translations 
+          ? JSON.parse(JSON.stringify(editForm.translations))
+          : {
+              [sourceLang]: { title: '', description: '' },
+              [targetLang]: { title: '', description: '' }
+          };
+
+      // Ensure keys exist in case of partial data from legacy
+      if (!translations[sourceLang]) translations[sourceLang] = { title: '', description: '' };
+      if (!translations[targetLang]) translations[targetLang] = { title: '', description: '' };
+
+      const oldSourceTitle = translations[sourceLang].title;
+      const oldSourceDesc = translations[sourceLang].description;
+      const currentTargetTitle = translations[targetLang].title;
+      const currentTargetDesc = translations[targetLang].description;
+
+      // 1. Update Title Translation
+      // Trigger if source changed in form OR if target is missing/empty (for new items)
+      if (editForm.title !== oldSourceTitle || !currentTargetTitle) {
+          translations[sourceLang].title = editForm.title;
+          
+          if (editForm.title) {
+              const translatedTitle = await translateText(editForm.title, sourceLang, targetLang);
+              translations[targetLang].title = translatedTitle;
+          } else {
+              translations[targetLang].title = '';
+          }
+      }
+
+      // 2. Update Description Translation
+      // Trigger if source changed in form OR if target is missing/empty (for new items)
+      if (editForm.description !== oldSourceDesc || !currentTargetDesc) {
+          translations[sourceLang].description = editForm.description;
+          
+          if (editForm.description) {
+              const translatedDesc = await translateText(editForm.description, sourceLang, targetLang);
+              translations[targetLang].description = translatedDesc;
+          } else {
+              translations[targetLang].description = '';
+          }
+      }
+      
+      // Ensure source is definitely up to date in the object
+      translations[sourceLang].title = editForm.title;
+      translations[sourceLang].description = editForm.description;
+
+      const updatedService: ServiceItem = {
+          ...editForm,
+          translations: translations
+      };
+
+      onSave(updatedService);
       setIsEditing(false);
       setEditForm(null);
+    } catch (error) {
+        console.error("Failed to save service:", error);
+        alert("Failed to translate/save service. Check console.");
+    } finally {
+        setIsSaving(false);
     }
+  };
+
+  const renderIconPreview = (iconName: string, size: number = 24) => {
+     if (IconKeys.includes(iconName)) {
+        return React.createElement((Icons as any)[iconName] || Icons.Stethoscope, { size });
+     }
+     return <i className={`${iconName}`} style={{ fontSize: size }}></i>;
   };
 
   if (isEditing && editForm) {
@@ -352,22 +585,64 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
           <Input label="Service Title" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} required placeholder="e.g. Poli Umum" />
           <TextArea label="Description" rows={3} value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} required placeholder="Description of the service..." />
           
-          <Select label="Icon" value={editForm.iconName} onChange={e => setEditForm({...editForm, iconName: e.target.value})}>
-             {IconKeys.map((key) => (
-               <option key={key} value={key}>{key}</option>
-             ))}
-          </Select>
+          <div className="mb-4">
+             <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Icon</label>
+                <div className="text-xs flex gap-3">
+                   <button 
+                     type="button" 
+                     onClick={() => { setIsCustomIcon(false); setEditForm({...editForm, iconName: 'Stethoscope'}); }}
+                     className={`pb-1 border-b-2 transition-colors ${!isCustomIcon ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500'}`}
+                   >
+                     Standard
+                   </button>
+                   <button 
+                     type="button" 
+                     onClick={() => { setIsCustomIcon(true); setEditForm({...editForm, iconName: 'fa-solid fa-heart'}); }}
+                     className={`pb-1 border-b-2 transition-colors ${isCustomIcon ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500'}`}
+                   >
+                     Font Awesome
+                   </button>
+                </div>
+             </div>
+             
+             {!isCustomIcon ? (
+                <Select label="" value={editForm.iconName} onChange={e => setEditForm({...editForm, iconName: e.target.value})}>
+                    {IconKeys.map((key) => (
+                    <option key={key} value={key}>{key}</option>
+                    ))}
+                </Select>
+             ) : (
+                <Input 
+                   label="" 
+                   value={editForm.iconName} 
+                   onChange={e => setEditForm({...editForm, iconName: e.target.value})} 
+                   placeholder="e.g. fa-solid fa-tooth"
+                />
+             )}
+          </div>
 
           <div className="flex items-center gap-2 mb-6">
              <span className="text-sm font-medium text-gray-700 dark:text-slate-300">Preview:</span>
              <div className="w-10 h-10 bg-primary-100 dark:bg-slate-700 text-primary-600 dark:text-primary-400 rounded-lg flex items-center justify-center">
-                {React.createElement((Icons as any)[editForm.iconName] || Icons.Stethoscope, { size: 24 })}
+                {renderIconPreview(editForm.iconName)}
              </div>
           </div>
           
           <div className="flex justify-end gap-3 mt-4">
             <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Save Service</button>
+            <button 
+                type="submit" 
+                disabled={isSaving}
+                className={`px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 ${isSaving ? 'opacity-75 cursor-wait' : ''}`}
+            >
+                {isSaving ? (
+                    <>
+                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                       Saving...
+                    </>
+                ) : 'Save Service'}
+            </button>
           </div>
         </form>
       </div>
@@ -398,8 +673,8 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
               <tr key={service.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary-50 dark:bg-slate-700 text-primary-600 dark:text-primary-400 rounded-lg">
-                      {React.createElement((Icons as any)[service.iconName] || Icons.Stethoscope, { size: 18 })}
+                    <div className="p-2 bg-primary-50 dark:bg-slate-700 text-primary-600 dark:text-primary-400 rounded-lg flex items-center justify-center w-10 h-10">
+                      {renderIconPreview(service.iconName, 18)}
                     </div>
                     <div className="font-medium text-gray-900 dark:text-white">{service.title}</div>
                   </div>
@@ -426,11 +701,7 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
 export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) => void; onDelete: (id: string) => void }> = ({ posts, onSave, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<BlogPost | null>(null);
-
-  const handleEdit = (post: BlogPost) => {
-    setEditForm(post);
-    setIsEditing(true);
-  };
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleCreate = () => {
     setEditForm({
@@ -439,19 +710,79 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
       excerpt: '',
       content: '',
       author: 'Admin',
-      category: 'Health',
-      coverImageUrl: 'https://images.unsplash.com/photo-1579684385183-1b60fe766338?auto=format&fit=crop&q=80&w=800',
+      category: 'General',
+      coverImageUrl: '',
       publishedAt: new Date().toISOString().split('T')[0],
+      translations: {
+        id: { title: '', excerpt: '', content: '', category: '' },
+        en: { title: '', excerpt: '', content: '', category: '' }
+      }
     });
     setIsEditing(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleEdit = (post: BlogPost) => {
+    setEditForm(post);
+    setIsEditing(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editForm) {
-      onSave(editForm);
+    if (!editForm) return;
+
+    setIsSaving(true);
+    try {
+      const settings = getSettings();
+      const sourceLang = settings.defaultLanguage;
+      const targetLang = sourceLang === 'id' ? 'en' : 'id';
+      
+      // Clone or init translations
+      let translations = editForm.translations 
+        ? JSON.parse(JSON.stringify(editForm.translations))
+        : {
+            id: { title: '', excerpt: '', content: '', category: '' },
+            en: { title: '', excerpt: '', content: '', category: '' }
+          };
+          
+      // Ensure structure exists
+      if (!translations[sourceLang]) translations[sourceLang] = { title: '', excerpt: '', content: '', category: '' };
+      if (!translations[targetLang]) translations[targetLang] = { title: '', excerpt: '', content: '', category: '' };
+
+      const fields: Array<keyof typeof translations.id> = ['title', 'excerpt', 'content', 'category'];
+
+      for (const field of fields) {
+        const newVal = (editForm as any)[field];
+        const oldSourceVal = translations[sourceLang][field];
+        const currentTargetVal = translations[targetLang][field];
+
+        // If value changed or target is missing, translate
+        if (newVal !== oldSourceVal || !currentTargetVal) {
+           translations[sourceLang][field] = newVal;
+           if (newVal) {
+             const translated = await translateText(newVal, sourceLang, targetLang);
+             translations[targetLang][field] = translated;
+           } else {
+             translations[targetLang][field] = '';
+           }
+        } else {
+            // just sync source
+            translations[sourceLang][field] = newVal;
+        }
+      }
+
+      const postToSave: BlogPost = {
+        ...editForm,
+        translations
+      };
+
+      onSave(postToSave);
       setIsEditing(false);
       setEditForm(null);
+    } catch (err) {
+      console.error(err);
+      alert('Error saving post');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -463,21 +794,42 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
            <button onClick={() => setIsEditing(false)} className="text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"><Icons.X size={20}/></button>
         </div>
         <form onSubmit={handleSave} className="p-6">
-          <Input label="Title" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} required />
-          <TextArea label="Excerpt" value={editForm.excerpt} onChange={e => setEditForm({...editForm, excerpt: e.target.value})} required />
-          <TextArea label="Content" rows={8} value={editForm.content} onChange={e => setEditForm({...editForm, content: e.target.value})} required />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-slate-700">
+           <Input label="Title" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} required placeholder="Post Title" />
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <Input label="Category" value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})} required placeholder="Health, Dental, etc." />
              <Input label="Author" value={editForm.author} onChange={e => setEditForm({...editForm, author: e.target.value})} required />
-             <Input label="Category" value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})} required />
-             <Input label="Cover Image URL" value={editForm.coverImageUrl} onChange={e => setEditForm({...editForm, coverImageUrl: e.target.value})} required />
-             <Input label="Publish Date" type="date" value={editForm.publishedAt} onChange={e => setEditForm({...editForm, publishedAt: e.target.value})} required />
-          </div>
-          
-          <div className="flex justify-end gap-3 mt-4">
-            <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Save Post</button>
-          </div>
+           </div>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <Input label="Published Date" type="date" value={editForm.publishedAt} onChange={e => setEditForm({...editForm, publishedAt: e.target.value})} required />
+             <div>
+                <Input label="Cover Image URL" value={editForm.coverImageUrl} onChange={e => setEditForm({...editForm, coverImageUrl: processImageUrl(e.target.value)})} placeholder="Image URL (supports Drive)" />
+                {editForm.coverImageUrl && (
+                   <div className="mt-[-10px] mb-4">
+                      <p className="text-xs text-gray-500 mb-1">Preview:</p>
+                      <img src={editForm.coverImageUrl} alt="Preview" className="h-20 w-auto rounded border" referrerPolicy="no-referrer" />
+                   </div>
+                )}
+             </div>
+           </div>
+           
+           <TextArea label="Excerpt" value={editForm.excerpt} onChange={e => setEditForm({...editForm, excerpt: e.target.value})} rows={3} required placeholder="Short summary for listing..." />
+           <TextArea label="Content" value={editForm.content} onChange={e => setEditForm({...editForm, content: e.target.value})} rows={12} required placeholder="Full blog content..." />
+           
+           <div className="flex justify-end gap-3 mt-6">
+              <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
+              <button 
+                  type="submit" 
+                  disabled={isSaving}
+                  className={`px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 ${isSaving ? 'opacity-75 cursor-wait' : ''}`}
+              >
+                  {isSaving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        Translating & Saving...
+                      </>
+                  ) : 'Save Post'}
+              </button>
+           </div>
         </form>
       </div>
     );
@@ -486,10 +838,10 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-white">Blog Posts</h2>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">Blog Management</h2>
         <button onClick={handleCreate} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 font-medium">
           <Icons.Plus size={18} />
-          New Post
+          New Article
         </button>
       </div>
 
@@ -497,9 +849,8 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
         <table className="w-full text-left">
           <thead className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Title</th>
-              <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Category</th>
-              <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
+              <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Title / Excerpt</th>
+              <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Info</th>
               <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider text-right">Actions</th>
             </tr>
           </thead>
@@ -507,24 +858,24 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
             {posts.map((post) => (
               <tr key={post.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                 <td className="px-6 py-4">
-                  <div className="font-medium text-gray-900 dark:text-white">{post.title}</div>
-                  <div className="text-xs text-gray-500 dark:text-slate-400">{post.author}</div>
+                  <div className="font-medium text-gray-900 dark:text-white mb-1 line-clamp-1">{post.title}</div>
+                  <div className="text-sm text-gray-500 dark:text-slate-400 line-clamp-1">{post.excerpt}</div>
                 </td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300">
-                    {post.category}
-                  </span>
+                <td className="px-6 py-4 text-sm text-gray-500 dark:text-slate-400">
+                   <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center gap-1"><Icons.Article size={12}/> {post.category}</span>
+                      <span className="inline-flex items-center gap-1"><Icons.Dashboard size={12}/> {post.publishedAt}</span>
+                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500 dark:text-slate-400">{post.publishedAt}</td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button onClick={() => handleEdit(post)} className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300"><Icons.Edit size={18} /></button>
-                  <button onClick={() => { if(window.confirm('Are you sure?')) onDelete(post.id); }} className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"><Icons.Delete size={18} /></button>
+                  <button onClick={() => { if(window.confirm('Are you sure you want to delete this post?')) onDelete(post.id); }} className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"><Icons.Delete size={18} /></button>
                 </td>
               </tr>
             ))}
             {posts.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">No blog posts found. Create one!</td>
+                <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">No blog posts found.</td>
               </tr>
             )}
           </tbody>
