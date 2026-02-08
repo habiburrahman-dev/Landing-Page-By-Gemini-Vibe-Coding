@@ -1,11 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SiteSettings, BlogPost, ServiceItem } from '../types';
 import { Icons, IconKeys } from '../components/Icons';
 import { PRESET_COLORS } from '../services/themeUtils';
 import { GOOGLE_FONTS } from '../services/fontUtils';
 import { translateText } from '../services/googleTranslate';
 import { getSettings } from '../services/storage';
+import { hashPassword } from '../services/security';
 
 // --- Helper for Image URLs ---
 const processImageUrl = (url: string) => {
@@ -211,7 +212,10 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
       return;
     }
 
-    onUpdateCredentials(secEmail, secNewPass || undefined);
+    // Encrypt the password before sending to parent handler (which saves to storage)
+    const encryptedPassword = secNewPass ? hashPassword(secNewPass) : undefined;
+
+    onUpdateCredentials(secEmail, encryptedPassword);
     setSecNewPass('');
     setSecConfirmPass('');
     setSecSuccess(true);
@@ -468,13 +472,27 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
   const [editForm, setEditForm] = useState<ServiceItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCustomIcon, setIsCustomIcon] = useState(false);
+  const [iconSearch, setIconSearch] = useState('');
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
      if (editForm) {
-        // If the current icon is NOT in IconKeys, assume it is custom
-        setIsCustomIcon(!IconKeys.includes(editForm.iconName));
+        // If the current icon is NOT in Icons (as a key), assume it is custom
+        setIsCustomIcon(!((Icons as any)[editForm.iconName]));
      }
   }, [editForm]);
+
+  // Click outside to close picker
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setShowIconPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleEdit = (service: ServiceItem) => {
     setEditForm(service);
@@ -522,10 +540,8 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
       const currentTargetDesc = translations[targetLang].description;
 
       // 1. Update Title Translation
-      // Trigger if source changed in form OR if target is missing/empty (for new items)
       if (editForm.title !== oldSourceTitle || !currentTargetTitle) {
           translations[sourceLang].title = editForm.title;
-          
           if (editForm.title) {
               const translatedTitle = await translateText(editForm.title, sourceLang, targetLang);
               translations[targetLang].title = translatedTitle;
@@ -535,10 +551,8 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
       }
 
       // 2. Update Description Translation
-      // Trigger if source changed in form OR if target is missing/empty (for new items)
       if (editForm.description !== oldSourceDesc || !currentTargetDesc) {
           translations[sourceLang].description = editForm.description;
-          
           if (editForm.description) {
               const translatedDesc = await translateText(editForm.description, sourceLang, targetLang);
               translations[targetLang].description = translatedDesc;
@@ -568,9 +582,12 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
   };
 
   const renderIconPreview = (iconName: string, size: number = 24) => {
-     if (IconKeys.includes(iconName)) {
-        return React.createElement((Icons as any)[iconName] || Icons.Stethoscope, { size });
+     // Check if it's a valid React component in our Icons set
+     const IconComponent = (Icons as any)[iconName];
+     if (IconComponent) {
+        return React.createElement(IconComponent, { size });
      }
+     // Fallback to font-awesome class
      return <i className={`${iconName}`} style={{ fontSize: size }}></i>;
   };
 
@@ -607,11 +624,51 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
              </div>
              
              {!isCustomIcon ? (
-                <Select label="" value={editForm.iconName} onChange={e => setEditForm({...editForm, iconName: e.target.value})}>
-                    {IconKeys.map((key) => (
-                    <option key={key} value={key}>{key}</option>
-                    ))}
-                </Select>
+                <div className="relative" ref={pickerRef}>
+                    <div 
+                      onClick={() => setShowIconPicker(!showIconPicker)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg shadow-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex justify-between items-center"
+                    >
+                       <span className="flex items-center gap-2">
+                         {renderIconPreview(editForm.iconName, 16)}
+                         {editForm.iconName}
+                       </span>
+                       <Icons.ChevronDown size={16} />
+                    </div>
+                    
+                    {showIconPicker && (
+                       <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl p-2">
+                          <input 
+                            type="text"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md mb-2 bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder="Search icons..."
+                            value={iconSearch}
+                            onChange={(e) => setIconSearch(e.target.value)}
+                            autoFocus
+                          />
+                          <div className="grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                             {IconKeys.filter(k => k.toLowerCase().includes(iconSearch.toLowerCase())).slice(0, 60).map(key => {
+                                // Double check the component exists to avoid crashes
+                                const IconComp = (Icons as any)[key];
+                                if (!IconComp) return null;
+                                return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => { setEditForm({...editForm, iconName: key}); setShowIconPicker(false); }}
+                                  className={`p-2 rounded hover:bg-primary-100 dark:hover:bg-slate-700 flex justify-center items-center ${editForm.iconName === key ? 'bg-primary-50 text-primary-600' : 'text-gray-500 dark:text-slate-400'}`}
+                                  title={key}
+                                >
+                                   {React.createElement(IconComp, { size: 20 })}
+                                </button>
+                             )})}
+                             {IconKeys.filter(k => k.toLowerCase().includes(iconSearch.toLowerCase())).length === 0 && (
+                               <div className="col-span-full text-center py-2 text-xs text-gray-500">No icons found</div>
+                             )}
+                          </div>
+                       </div>
+                    )}
+                </div>
              ) : (
                 <Input 
                    label="" 

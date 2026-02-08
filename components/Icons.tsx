@@ -1,75 +1,28 @@
-import { 
-  Stethoscope, 
-  Smile, 
-  Baby, 
-  Ambulance, 
-  Phone, 
-  MapPin, 
-  Mail, 
-  Facebook, 
-  Instagram, 
-  Menu, 
-  X,
-  LayoutDashboard,
-  Settings,
-  FileText,
-  LogOut,
-  Plus,
-  Trash2,
-  Edit,
-  Save,
-  ChevronRight,
-  ArrowRight,
-  Syringe,
-  Bed,
-  ClipboardList,
-  TestTube,
-  Activity,
-  HeartPulse,
-  MessageCircle,
-  Sun,
-  Moon,
-  Link,
-  Check,
-  Share2,
-  LogIn
-} from 'lucide-react';
 
-export const Icons = {
-  Stethoscope,
-  Smile,
-  Baby,
-  Ambulance,
-  Phone,
-  MapPin,
-  Mail,
-  Facebook,
-  Instagram,
-  Menu,
-  X,
-  Dashboard: LayoutDashboard,
-  Settings,
-  Article: FileText,
-  Logout: LogOut,
-  Plus,
-  Delete: Trash2,
-  Edit,
-  Save,
-  ChevronRight,
-  ArrowRight,
-  Syringe,
-  Bed,
-  ClipboardList,
-  TestTube,
-  Activity,
-  HeartPulse,
-  MessageCircle,
-  Sun,
-  Moon,
-  Link,
-  Check,
-  Share2,
-  LogIn
+import * as LucideIcons from 'lucide-react';
+
+// Create aliases for backward compatibility with code that used specific names
+// defined in the previous manual export list.
+const Aliases = {
+  Dashboard: LucideIcons.LayoutDashboard,
+  Article: LucideIcons.FileText,
+  Logout: LucideIcons.LogOut,
+  Delete: LucideIcons.Trash2,
+  // Add common aliases that might have been used or are intuitive
+  Settings: LucideIcons.Settings,
 };
 
-export const IconKeys = Object.keys(Icons);
+// Export all icons + aliases
+export const Icons = {
+  ...LucideIcons,
+  ...Aliases
+};
+
+// Export keys for the icon picker. 
+// Filter to include only valid Lucide components (Capitalized) and exclude internal utilities.
+export const IconKeys = Object.keys(LucideIcons).filter(key => 
+  key !== 'createLucideIcon' && 
+  key !== 'default' && 
+  key !== 'lucide-react' &&
+  /^[A-Z]/.test(key)
+);

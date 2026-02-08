@@ -11,6 +11,7 @@ import {
   getServices, saveService, deleteService, saveAllServices,
   getAdminCredentials, saveAdminCredentials
 } from './services/storage';
+import { verifyPassword } from './services/security';
 import { SiteSettings, BlogPost, ServiceItem } from './types';
 import { Icons } from './components/Icons';
 import { applyTheme } from './services/themeUtils';
@@ -37,11 +38,11 @@ export default function App() {
   const { path, navigate } = useHashPath();
   const { i18n } = useTranslation();
   
-  // App State (Simulating DB)
-  const [settings, setSettingsState] = useState<SiteSettings>(getSettings());
-  const [posts, setPostsState] = useState<BlogPost[]>(getBlogPosts());
-  const [services, setServicesState] = useState<ServiceItem[]>(getServices());
-  const [adminCreds, setAdminCreds] = useState(getAdminCredentials());
+  // App State (Simulating DB) - Use Lazy Initialization
+  const [settings, setSettingsState] = useState<SiteSettings>(() => getSettings());
+  const [posts, setPostsState] = useState<BlogPost[]>(() => getBlogPosts());
+  const [services, setServicesState] = useState<ServiceItem[]>(() => getServices());
+  const [adminCreds, setAdminCreds] = useState(() => getAdminCredentials());
   
   // User Preferences State
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -180,6 +181,7 @@ export default function App() {
   };
 
   const handleUpdateCredentials = (email: string, password?: string) => {
+    // Note: The hashing happens inside SettingsForm in AdminPages now before reaching here
     const newCreds = { email, password: password || adminCreds.password };
     saveAdminCredentials(newCreds);
     setAdminCreds(newCreds);
@@ -196,8 +198,10 @@ export default function App() {
       return;
     }
 
-    // 2. Strict Credential Check
-    if (loginEmail === adminCreds.email && loginPassword === adminCreds.password) {
+    // 2. Strict Credential Check using Bcrypt verification
+    const isValid = loginEmail === adminCreds.email && verifyPassword(loginPassword, adminCreds.password);
+
+    if (isValid) {
       setIsAdminLoggedIn(true);
       setLoginEmail('');
       setLoginPassword('');

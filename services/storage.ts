@@ -1,10 +1,12 @@
 
 import { SiteSettings, BlogPost, ServiceItem } from '../types';
+import { hashPassword } from './security';
 
-const SETTINGS_KEY = 'kmm_settings';
-const BLOG_KEY = 'kmm_blog';
-const SERVICES_KEY = 'kmm_services';
-const ADMIN_KEY = 'kmm_admin_creds';
+// Updated keys to ensure clean state if previous versions had issues
+const SETTINGS_KEY = 'kmm_settings_v1';
+const BLOG_KEY = 'kmm_blog_v1';
+const SERVICES_KEY = 'kmm_services_v1';
+const ADMIN_KEY = 'kmm_admin_creds_v1';
 
 const DEFAULT_SETTINGS: SiteSettings = {
   name: 'Klinik Mitra Medika',
@@ -42,9 +44,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   }
 };
 
+// Default is now hashed using the security service
 const DEFAULT_ADMIN_CREDS = {
-  email: 'admin@mitramedika.co.id',
-  password: 'password'
+  email: 'admin-it@mitramedikaskw.com',
+  password: '$2a$12$gpk1/Z4mBOinHwfvjUV3V.us0MUen30vHAr.xDf6TlzEb3.8rS44u'
 };
 
 const DEFAULT_BLOG_POSTS: BlogPost[] = [
@@ -235,9 +238,20 @@ const DEFAULT_SERVICES_LIST: ServiceItem[] = [
   },
 ];
 
+// Helper to safely parse JSON
+const safeJsonParse = <T>(json: string | null, fallback: T): T => {
+  if (!json) return fallback;
+  try {
+    return JSON.parse(json);
+  } catch (e) {
+    console.error("Failed to parse storage item, reverting to fallback.", e);
+    return fallback;
+  }
+};
+
 export const getSettings = (): SiteSettings => {
   const stored = localStorage.getItem(SETTINGS_KEY);
-  const parsed = stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
+  const parsed = safeJsonParse(stored, DEFAULT_SETTINGS);
   
   // Backward compatibility: If storing old settings without translations object
   if (!parsed.translations) {
@@ -253,21 +267,30 @@ export const getSettings = (): SiteSettings => {
 };
 
 export const saveSettings = (settings: SiteSettings) => {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.error("Failed to save settings to localStorage", e);
+  }
 };
 
 export const getAdminCredentials = () => {
   const stored = localStorage.getItem(ADMIN_KEY);
-  return stored ? JSON.parse(stored) : DEFAULT_ADMIN_CREDS;
+  // If no storage found, it returns the DEFAULT which is now hashed via hashPassword above
+  return safeJsonParse(stored, DEFAULT_ADMIN_CREDS);
 };
 
 export const saveAdminCredentials = (creds: {email: string, password: string}) => {
-  localStorage.setItem(ADMIN_KEY, JSON.stringify(creds));
+  try {
+    localStorage.setItem(ADMIN_KEY, JSON.stringify(creds));
+  } catch (e) {
+    console.error("Failed to save admin creds", e);
+  }
 };
 
 export const getBlogPosts = (): BlogPost[] => {
   const stored = localStorage.getItem(BLOG_KEY);
-  return stored ? JSON.parse(stored) : DEFAULT_BLOG_POSTS;
+  return safeJsonParse(stored, DEFAULT_BLOG_POSTS);
 };
 
 export const saveBlogPost = (post: BlogPost) => {
@@ -280,22 +303,28 @@ export const saveBlogPost = (post: BlogPost) => {
     posts.unshift(post);
   }
   
-  localStorage.setItem(BLOG_KEY, JSON.stringify(posts));
+  try {
+    localStorage.setItem(BLOG_KEY, JSON.stringify(posts));
+  } catch(e) { console.error(e); }
 };
 
 export const saveAllBlogPosts = (posts: BlogPost[]) => {
-  localStorage.setItem(BLOG_KEY, JSON.stringify(posts));
+  try {
+    localStorage.setItem(BLOG_KEY, JSON.stringify(posts));
+  } catch(e) { console.error(e); }
 };
 
 export const deleteBlogPost = (id: string) => {
   const posts = getBlogPosts();
   const newPosts = posts.filter((p) => p.id !== id);
-  localStorage.setItem(BLOG_KEY, JSON.stringify(newPosts));
+  try {
+    localStorage.setItem(BLOG_KEY, JSON.stringify(newPosts));
+  } catch(e) { console.error(e); }
 };
 
 export const getServices = (): ServiceItem[] => {
   const stored = localStorage.getItem(SERVICES_KEY);
-  return stored ? JSON.parse(stored) : DEFAULT_SERVICES_LIST;
+  return safeJsonParse(stored, DEFAULT_SERVICES_LIST);
 };
 
 export const saveService = (service: ServiceItem) => {
@@ -308,15 +337,21 @@ export const saveService = (service: ServiceItem) => {
     services.push(service);
   }
   
-  localStorage.setItem(SERVICES_KEY, JSON.stringify(services));
+  try {
+    localStorage.setItem(SERVICES_KEY, JSON.stringify(services));
+  } catch(e) { console.error(e); }
 };
 
 export const saveAllServices = (services: ServiceItem[]) => {
-  localStorage.setItem(SERVICES_KEY, JSON.stringify(services));
+  try {
+    localStorage.setItem(SERVICES_KEY, JSON.stringify(services));
+  } catch(e) { console.error(e); }
 };
 
 export const deleteService = (id: string) => {
   const services = getServices();
   const newServices = services.filter((s) => s.id !== id);
-  localStorage.setItem(SERVICES_KEY, JSON.stringify(newServices));
+  try {
+    localStorage.setItem(SERVICES_KEY, JSON.stringify(newServices));
+  } catch(e) { console.error(e); }
 };
