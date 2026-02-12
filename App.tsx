@@ -7,17 +7,16 @@ import { HomePage, BlogPage, ServicesPage, AboutPage, AppointmentPage, BlogPostP
 import { Dashboard, SettingsForm, BlogManager, ServicesManager } from './pages/AdminPages';
 import { 
   getSettings, saveSettings, 
-  getBlogPosts, saveBlogPost, deleteBlogPost, saveAllBlogPosts,
-  getServices, saveService, deleteService, saveAllServices,
-  getAdminCredentials, saveAdminCredentials
+  getBlogPosts, saveBlogPost, deleteBlogPost,
+  getServices, saveService, deleteService,
+  verifyAdminLogin, updateAdminCredentials
 } from './services/storage';
-import { verifyPassword } from './services/security';
 import { SiteSettings, BlogPost, ServiceItem } from './types';
 import { Icons } from './components/Icons';
 import { applyTheme } from './services/themeUtils';
 import { applyFont } from './services/fontUtils';
 
-// Use a simple hash-based router for SPA behavior without backend
+// Use a simple hash-based router for SPA behavior without backend routing support for frontend assets
 const useHashPath = () => {
   const [path, setPath] = useState(window.location.hash.replace('#', '') || '/');
   
@@ -38,38 +37,59 @@ export default function App() {
   const { path, navigate } = useHashPath();
   const { i18n } = useTranslation();
   
-  // App State (Simulating DB) - Use Lazy Initialization
-  const [settings, setSettingsState] = useState<SiteSettings>(() => getSettings());
-  const [posts, setPostsState] = useState<BlogPost[]>(() => getBlogPosts());
-  const [services, setServicesState] = useState<ServiceItem[]>(() => getServices());
-  const [adminCreds, setAdminCreds] = useState(() => getAdminCredentials());
+  // App State - Initialized as empty/loading
+  const [loading, setLoading] = useState(true);
+  const [settings, setSettingsState] = useState<SiteSettings | null>(null);
+  const [posts, setPostsState] = useState<BlogPost[]>([]);
+  const [services, setServicesState] = useState<ServiceItem[]>([]);
   
+  // Load Data from API on Mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [fetchedSettings, fetchedPosts, fetchedServices] = await Promise.all([
+          getSettings(),
+          getBlogPosts(),
+          getServices()
+        ]);
+        
+        setSettingsState(fetchedSettings);
+        setPostsState(fetchedPosts);
+        setServicesState(fetchedServices);
+      } catch (error) {
+        console.error("Failed to load application data", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   // User Preferences State
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Check local storage or system preference
     const stored = localStorage.getItem('theme');
     if (stored) return stored === 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // Sync language with settings if no local preference
+  // Sync language with settings
   useEffect(() => {
+    if (!settings) return;
     const savedLang = localStorage.getItem('kmm_lang');
-    // If user has not manually set a language preference, use the site setting
     if (!savedLang && settings.defaultLanguage && i18n.language !== settings.defaultLanguage) {
       i18n.changeLanguage(settings.defaultLanguage);
     }
-  }, [settings.defaultLanguage, i18n]);
+  }, [settings, i18n]);
 
-  // Inject Stored Translations into i18next (Settings, Services, Blog)
+  // Inject Stored Translations
   useEffect(() => {
-    // 1. Inject Site Settings Translations
+    if (!settings) return;
+
     if (settings.translations) {
       i18n.addResourceBundle('id', 'translation', settings.translations.id, true, true);
       i18n.addResourceBundle('en', 'translation', settings.translations.en, true, true);
     }
 
-    // 2. Inject Service Translations
     const idServices: Record<string, any> = {};
     const enServices: Record<string, any> = {};
 
@@ -80,14 +100,9 @@ export default function App() {
       }
     });
 
-    if (Object.keys(idServices).length > 0) {
-      i18n.addResourceBundle('id', 'translation', { services: idServices }, true, true);
-    }
-    if (Object.keys(enServices).length > 0) {
-      i18n.addResourceBundle('en', 'translation', { services: enServices }, true, true);
-    }
+    if (Object.keys(idServices).length > 0) i18n.addResourceBundle('id', 'translation', { services: idServices }, true, true);
+    if (Object.keys(enServices).length > 0) i18n.addResourceBundle('en', 'translation', { services: enServices }, true, true);
 
-    // 3. Inject Blog Post Translations
     const idPosts: Record<string, any> = {};
     const enPosts: Record<string, any> = {};
 
@@ -98,19 +113,14 @@ export default function App() {
       }
     });
 
-    if (Object.keys(idPosts).length > 0) {
-      i18n.addResourceBundle('id', 'translation', { posts: idPosts }, true, true);
-    }
-    if (Object.keys(enPosts).length > 0) {
-      i18n.addResourceBundle('en', 'translation', { posts: enPosts }, true, true);
-    }
+    if (Object.keys(idPosts).length > 0) i18n.addResourceBundle('id', 'translation', { posts: idPosts }, true, true);
+    if (Object.keys(enPosts).length > 0) i18n.addResourceBundle('en', 'translation', { posts: enPosts }, true, true);
     
-    // Force a re-render/update if the language is currently active
     i18n.changeLanguage(i18n.language);
 
   }, [settings, services, posts, i18n]);
 
-  // Apply dark mode class to HTML element
+  // Styling Effects
   useEffect(() => {
     const root = window.document.documentElement;
     if (isDarkMode) {
@@ -122,18 +132,16 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Apply Theme Color
   useEffect(() => {
-    applyTheme(settings.themeColor || '#2563eb');
-  }, [settings.themeColor]);
+    if (settings?.themeColor) applyTheme(settings.themeColor);
+  }, [settings?.themeColor]);
 
-  // Apply Font
   useEffect(() => {
-    applyFont(settings.fontFamily || 'Inter');
-  }, [settings.fontFamily]);
+    if (settings?.fontFamily) applyFont(settings.fontFamily);
+  }, [settings?.fontFamily]);
 
-  // Apply Favicon (New)
   useEffect(() => {
+    if (!settings) return;
     let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
     if (!link) {
       link = document.createElement('link');
@@ -141,9 +149,8 @@ export default function App() {
       link.rel = 'shortcut icon';
       document.getElementsByTagName('head')[0].appendChild(link);
     }
-    // Use faviconUrl if available, otherwise fallback to logoUrl
     link.href = settings.faviconUrl || settings.logoUrl;
-  }, [settings.faviconUrl, settings.logoUrl]);
+  }, [settings?.faviconUrl, settings?.logoUrl]);
   
   // Admin State
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
@@ -153,62 +160,73 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // handlers
-  const handleSaveSettings = (newSettings: SiteSettings) => {
-    saveSettings(newSettings);
-    setSettingsState(newSettings);
+  // Handlers (Now Async)
+  const handleSaveSettings = async (newSettings: SiteSettings) => {
+    await saveSettings(newSettings);
+    // Refresh
+    const updated = await getSettings();
+    setSettingsState(updated);
   };
 
-  const handleSavePost = (post: BlogPost) => {
-    saveBlogPost(post);
-    setPostsState(getBlogPosts()); // refresh from storage
+  const handleSavePost = async (post: BlogPost) => {
+    await saveBlogPost(post);
+    const updated = await getBlogPosts();
+    setPostsState(updated);
   };
 
-  const handleDeletePost = (id: string) => {
-    deleteBlogPost(id);
-    setPostsState(getBlogPosts());
+  const handleDeletePost = async (id: string) => {
+    await deleteBlogPost(id);
+    const updated = await getBlogPosts();
+    setPostsState(updated);
   };
 
-  const handleSaveService = (service: ServiceItem) => {
-    saveService(service);
-    setServicesState(getServices());
+  const handleSaveService = async (service: ServiceItem) => {
+    await saveService(service);
+    const updated = await getServices();
+    setServicesState(updated);
   };
 
-  const handleDeleteService = (id: string) => {
-    deleteService(id);
-    setServicesState(getServices());
+  const handleDeleteService = async (id: string) => {
+    await deleteService(id);
+    const updated = await getServices();
+    setServicesState(updated);
   };
 
-  const handleUpdateCredentials = (email: string, password?: string) => {
-    // Note: The hashing happens inside SettingsForm in AdminPages now before reaching here
-    const newCreds = { email, password: password || adminCreds.password };
-    saveAdminCredentials(newCreds);
-    setAdminCreds(newCreds);
+  const handleUpdateCredentials = async (email: string, password?: string) => {
+    await updateAdminCredentials(email, password);
+    alert("Credentials updated successfully");
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setIsLoggingIn(true);
 
-    // 1. Validation for Injection Patterns
-    const injectionPattern = /['";\\]|(--)/;
-    if (injectionPattern.test(loginEmail) || injectionPattern.test(loginPassword)) {
-      setLoginError("Security Alert: Invalid characters detected in input.");
-      return;
-    }
-
-    // 2. Strict Credential Check using Bcrypt verification
-    const isValid = loginEmail === adminCreds.email && verifyPassword(loginPassword, adminCreds.password);
-
-    if (isValid) {
-      setIsAdminLoggedIn(true);
-      setLoginEmail('');
-      setLoginPassword('');
-    } else {
-      setLoginError("Invalid email or password.");
+    try {
+      const success = await verifyAdminLogin(loginEmail, loginPassword);
+      if (success) {
+        setIsAdminLoggedIn(true);
+        setLoginEmail('');
+        setLoginPassword('');
+      } else {
+        setLoginError("Invalid email or password.");
+      }
+    } catch (err) {
+      setLoginError("Connection error.");
+    } finally {
+      setIsLoggingIn(false);
     }
   };
+
+  if (loading || !settings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-500 border-t-transparent"></div>
+      </div>
+    );
+  }
 
   // Admin Login Screen
   if (path === '/admin' && !isAdminLoggedIn) {
@@ -251,8 +269,8 @@ export default function App() {
                  required
                />
              </div>
-             <button type="submit" className="w-full bg-primary-600 text-white py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors">
-               Sign In
+             <button disabled={isLoggingIn} type="submit" className="w-full bg-primary-600 text-white py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-70">
+               {isLoggingIn ? 'Verifying...' : 'Sign In'}
              </button>
            </form>
            <button onClick={() => navigate('/')} className="w-full mt-4 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">
@@ -278,7 +296,7 @@ export default function App() {
           <SettingsForm 
             settings={settings} 
             onSave={handleSaveSettings} 
-            adminEmail={adminCreds.email}
+            adminEmail={loginEmail || 'Admin'}
             onUpdateCredentials={handleUpdateCredentials}
           />
         )}

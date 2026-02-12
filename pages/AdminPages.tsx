@@ -6,19 +6,12 @@ import { PRESET_COLORS } from '../services/themeUtils';
 import { GOOGLE_FONTS } from '../services/fontUtils';
 import { translateText } from '../services/googleTranslate';
 import { getSettings } from '../services/storage';
-import { hashPassword } from '../services/security';
 
 // --- Helper for Image URLs ---
 const processImageUrl = (url: string) => {
   if (!url) return '';
-  // Check for Google Drive links
-  // Handles standard view links, uc export links, and checks for file ID
   if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
-    // Try to match standard file ID pattern /file/d/ID or query param id=ID
     const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-    
-    // If a File ID is found, return the lh3.googleusercontent.com direct link
-    // This domain is significantly more reliable for <img> tags than drive.google.com/uc
     if (fileIdMatch && fileIdMatch[1]) {
         return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
     }
@@ -105,9 +98,9 @@ export const Dashboard: React.FC<{ postsCount: number; servicesCount: number }> 
 
 interface SettingsFormProps {
   settings: SiteSettings;
-  onSave: (s: SiteSettings) => void;
+  onSave: (s: SiteSettings) => Promise<void>;
   adminEmail: string;
-  onUpdateCredentials: (email: string, password?: string) => void;
+  onUpdateCredentials: (email: string, password?: string) => Promise<void>;
 }
 
 export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, adminEmail, onUpdateCredentials }) => {
@@ -130,64 +123,24 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
     e.preventDefault();
     setIsTranslating(true);
 
-    // Create a copy of the new data to manipulate
     const newData = { ...formData };
-    
-    // Determine translation direction based on default language
-    const sourceLang = newData.defaultLanguage; // e.g., 'id'
+    const sourceLang = newData.defaultLanguage;
     const targetLang = sourceLang === 'id' ? 'en' : 'id';
 
     try {
-        // --- Smart Translation Logic ---
-        
-        // 1. Tagline Logic
         if (newData.tagline !== settings.tagline) {
-            // Update source lang translation in storage
-            newData.translations = {
-                ...newData.translations,
-                [sourceLang]: {
-                    ...newData.translations[sourceLang],
-                    defaultTagline: newData.tagline
-                }
-            };
-
-            // Call Google Translate API for target lang
+            newData.translations = { ...newData.translations, [sourceLang]: { ...newData.translations[sourceLang], defaultTagline: newData.tagline } };
             const translatedTagline = await translateText(newData.tagline, sourceLang, targetLang);
-            
-            newData.translations = {
-                ...newData.translations,
-                [targetLang]: {
-                    ...newData.translations[targetLang],
-                    defaultTagline: translatedTagline
-                }
-            };
+            newData.translations = { ...newData.translations, [targetLang]: { ...newData.translations[targetLang], defaultTagline: translatedTagline } };
         }
 
-        // 2. Description Logic
         if (newData.description !== settings.description) {
-            // Update source lang translation in storage
-            newData.translations = {
-                ...newData.translations,
-                [sourceLang]: {
-                    ...newData.translations[sourceLang],
-                    defaultDescription: newData.description
-                }
-            };
-
-            // Call Google Translate API for target lang
+            newData.translations = { ...newData.translations, [sourceLang]: { ...newData.translations[sourceLang], defaultDescription: newData.description } };
             const translatedDesc = await translateText(newData.description, sourceLang, targetLang);
-            
-            newData.translations = {
-                ...newData.translations,
-                [targetLang]: {
-                    ...newData.translations[targetLang],
-                    defaultDescription: translatedDesc
-                }
-            };
+            newData.translations = { ...newData.translations, [targetLang]: { ...newData.translations[targetLang], defaultDescription: translatedDesc } };
         }
 
-        // Save final result
-        onSave(newData);
+        await onSave(newData);
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
     } catch (error) {
@@ -197,7 +150,7 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
     }
   };
 
-  const handleSecuritySubmit = (e: React.FormEvent) => {
+  const handleSecuritySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSecError('');
     setSecSuccess(false);
@@ -212,14 +165,15 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
       return;
     }
 
-    // Encrypt the password before sending to parent handler (which saves to storage)
-    const encryptedPassword = secNewPass ? hashPassword(secNewPass) : undefined;
-
-    onUpdateCredentials(secEmail, encryptedPassword);
-    setSecNewPass('');
-    setSecConfirmPass('');
-    setSecSuccess(true);
-    setTimeout(() => setSecSuccess(false), 3000);
+    try {
+      await onUpdateCredentials(secEmail, secNewPass || undefined);
+      setSecNewPass('');
+      setSecConfirmPass('');
+      setSecSuccess(true);
+      setTimeout(() => setSecSuccess(false), 3000);
+    } catch(err) {
+      setSecError("Failed to update credentials.");
+    }
   };
 
   return (
@@ -467,7 +421,7 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ settings, onSave, ad
   );
 };
 
-export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: ServiceItem) => void; onDelete: (id: string) => void }> = ({ services, onSave, onDelete }) => {
+export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: ServiceItem) => Promise<void>; onDelete: (id: string) => Promise<void> }> = ({ services, onSave, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<ServiceItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -501,7 +455,7 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
 
   const handleCreate = () => {
     setEditForm({
-      id: Date.now().toString(),
+      id: '', // Empty ID tells backend to create new
       title: '',
       description: '',
       iconName: 'Stethoscope',
@@ -517,12 +471,10 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
 
     try {
       // Logic: Update translation if value changed
-      const settings = getSettings();
+      const settings = await getSettings(); // Async now
       const sourceLang = settings.defaultLanguage; // e.g. 'id'
       const targetLang = sourceLang === 'id' ? 'en' : 'id';
       
-      // Initialize translation structure if missing. 
-      // Deep clone existing translations to avoid mutation, or create new structure for new items.
       let translations = editForm.translations 
           ? JSON.parse(JSON.stringify(editForm.translations))
           : {
@@ -530,7 +482,6 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
               [targetLang]: { title: '', description: '' }
           };
 
-      // Ensure keys exist in case of partial data from legacy
       if (!translations[sourceLang]) translations[sourceLang] = { title: '', description: '' };
       if (!translations[targetLang]) translations[targetLang] = { title: '', description: '' };
 
@@ -539,7 +490,6 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
       const currentTargetTitle = translations[targetLang].title;
       const currentTargetDesc = translations[targetLang].description;
 
-      // 1. Update Title Translation
       if (editForm.title !== oldSourceTitle || !currentTargetTitle) {
           translations[sourceLang].title = editForm.title;
           if (editForm.title) {
@@ -550,7 +500,6 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
           }
       }
 
-      // 2. Update Description Translation
       if (editForm.description !== oldSourceDesc || !currentTargetDesc) {
           translations[sourceLang].description = editForm.description;
           if (editForm.description) {
@@ -561,7 +510,6 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
           }
       }
       
-      // Ensure source is definitely up to date in the object
       translations[sourceLang].title = editForm.title;
       translations[sourceLang].description = editForm.description;
 
@@ -570,7 +518,7 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
           translations: translations
       };
 
-      onSave(updatedService);
+      await onSave(updatedService);
       setIsEditing(false);
       setEditForm(null);
     } catch (error) {
@@ -582,12 +530,10 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
   };
 
   const renderIconPreview = (iconName: string, size: number = 24) => {
-     // Check if it's a valid React component in our Icons set
      const IconComponent = (Icons as any)[iconName];
      if (IconComponent) {
         return React.createElement(IconComponent, { size });
      }
-     // Fallback to font-awesome class
      return <i className={`${iconName}`} style={{ fontSize: size }}></i>;
   };
 
@@ -648,7 +594,6 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
                           />
                           <div className="grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
                              {IconKeys.filter(k => k.toLowerCase().includes(iconSearch.toLowerCase())).slice(0, 60).map(key => {
-                                // Double check the component exists to avoid crashes
                                 const IconComp = (Icons as any)[key];
                                 if (!IconComp) return null;
                                 return (
@@ -662,9 +607,6 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
                                    {React.createElement(IconComp, { size: 20 })}
                                 </button>
                              )})}
-                             {IconKeys.filter(k => k.toLowerCase().includes(iconSearch.toLowerCase())).length === 0 && (
-                               <div className="col-span-full text-center py-2 text-xs text-gray-500">No icons found</div>
-                             )}
                           </div>
                        </div>
                     )}
@@ -693,12 +635,7 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
                 disabled={isSaving}
                 className={`px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 ${isSaving ? 'opacity-75 cursor-wait' : ''}`}
             >
-                {isSaving ? (
-                    <>
-                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                       Saving...
-                    </>
-                ) : 'Save Service'}
+                {isSaving ? 'Saving...' : 'Save Service'}
             </button>
           </div>
         </form>
@@ -739,7 +676,7 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
                 <td className="px-6 py-4 text-sm text-gray-500 dark:text-slate-400 max-w-md truncate">{service.description}</td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button onClick={() => handleEdit(service)} className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300"><Icons.Edit size={18} /></button>
-                  <button onClick={() => { if(window.confirm('Are you sure?')) onDelete(service.id); }} className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"><Icons.Delete size={18} /></button>
+                  <button onClick={async () => { if(window.confirm('Are you sure?')) await onDelete(service.id); }} className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"><Icons.Delete size={18} /></button>
                 </td>
               </tr>
             ))}
@@ -755,14 +692,14 @@ export const ServicesManager: React.FC<{ services: ServiceItem[]; onSave: (s: Se
   );
 };
 
-export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) => void; onDelete: (id: string) => void }> = ({ posts, onSave, onDelete }) => {
+export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) => Promise<void>; onDelete: (id: string) => Promise<void> }> = ({ posts, onSave, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<BlogPost | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleCreate = () => {
     setEditForm({
-      id: Date.now().toString(),
+      id: '', // Empty ID = create new
       title: '',
       excerpt: '',
       content: '',
@@ -789,11 +726,10 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
 
     setIsSaving(true);
     try {
-      const settings = getSettings();
+      const settings = await getSettings(); // Async
       const sourceLang = settings.defaultLanguage;
       const targetLang = sourceLang === 'id' ? 'en' : 'id';
       
-      // Clone or init translations
       let translations = editForm.translations 
         ? JSON.parse(JSON.stringify(editForm.translations))
         : {
@@ -801,7 +737,6 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
             en: { title: '', excerpt: '', content: '', category: '' }
           };
           
-      // Ensure structure exists
       if (!translations[sourceLang]) translations[sourceLang] = { title: '', excerpt: '', content: '', category: '' };
       if (!translations[targetLang]) translations[targetLang] = { title: '', excerpt: '', content: '', category: '' };
 
@@ -812,7 +747,6 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
         const oldSourceVal = translations[sourceLang][field];
         const currentTargetVal = translations[targetLang][field];
 
-        // If value changed or target is missing, translate
         if (newVal !== oldSourceVal || !currentTargetVal) {
            translations[sourceLang][field] = newVal;
            if (newVal) {
@@ -822,7 +756,6 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
              translations[targetLang][field] = '';
            }
         } else {
-            // just sync source
             translations[sourceLang][field] = newVal;
         }
       }
@@ -832,7 +765,7 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
         translations
       };
 
-      onSave(postToSave);
+      await onSave(postToSave);
       setIsEditing(false);
       setEditForm(null);
     } catch (err) {
@@ -879,12 +812,7 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
                   disabled={isSaving}
                   className={`px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 ${isSaving ? 'opacity-75 cursor-wait' : ''}`}
               >
-                  {isSaving ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        Translating & Saving...
-                      </>
-                  ) : 'Save Post'}
+                  {isSaving ? 'Saving...' : 'Save Post'}
               </button>
            </div>
         </form>
@@ -926,7 +854,7 @@ export const BlogManager: React.FC<{ posts: BlogPost[]; onSave: (p: BlogPost) =>
                 </td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button onClick={() => handleEdit(post)} className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300"><Icons.Edit size={18} /></button>
-                  <button onClick={() => { if(window.confirm('Are you sure you want to delete this post?')) onDelete(post.id); }} className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"><Icons.Delete size={18} /></button>
+                  <button onClick={async () => { if(window.confirm('Are you sure you want to delete this post?')) await onDelete(post.id); }} className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"><Icons.Delete size={18} /></button>
                 </td>
               </tr>
             ))}
